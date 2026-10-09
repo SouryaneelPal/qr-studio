@@ -1,5 +1,6 @@
 import type { StressRequest } from '../../lib/scan/stress';
 import { useStressTest } from './useStressTest';
+import { SectionHint } from '../guide/SectionHint';
 
 interface StressTestPanelProps {
   request: StressRequest | null;
@@ -9,7 +10,7 @@ export function StressTestPanel({ request }: StressTestPanelProps) {
   const { report, upToDate, running, run } = useStressTest(request);
   const failed = report?.results.filter((result) => !result.passed) ?? [];
 
-  let summary = 'Not run yet.';
+  let summary = 'Not run yet. Give your code a workout!';
   if (!request) summary = 'Create a valid code to test it.';
   else if (running && !report) summary = 'Testing…';
   else if (report) {
@@ -20,9 +21,14 @@ export function StressTestPanel({ request }: StressTestPanelProps) {
   return (
     <section className="panel panel--peach panel--stress stress" aria-labelledby="stress-heading">
       <div className="panel__header">
-        <h2 id="stress-heading" className="panel__title">
-          Stress test
-        </h2>
+        <div className="panel__heading">
+          <h2 id="stress-heading" className="panel__title">
+            Stress test
+          </h2>
+          <SectionHint section="the stress test">
+            Pretends the code is blurry, tiny, dim, tilted or smudged, and checks it still reads.
+          </SectionHint>
+        </div>
         <button type="button" className="button" disabled={!request} onClick={run}>
           {report ? 'Run again' : 'Run stress test'}
         </button>

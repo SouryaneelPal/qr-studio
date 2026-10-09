@@ -3,7 +3,8 @@ import { buildPayload } from '../../lib/payload';
 import { describeForScreenReader } from '../../lib/payload/describe';
 import type { QrInputs, QrType, Warning } from '../../lib/payload/types';
 import type { DrawPlan } from '../../lib/render/plan';
-import { renderQr } from '../../lib/render/renderQr';
+import { rasterize } from '../../lib/render/raster';
+import { renderQr, type QrDesign } from '../../lib/render/renderQr';
 import type { QrStyle } from '../../lib/render/style';
 import { readabilityWarnings } from '../../lib/scan/readability';
 import { selfCheck, type ScanCheck } from '../../lib/scan/selfCheck';
@@ -12,6 +13,9 @@ export interface PreviewRequest {
   type: QrType;
   input: QrInputs[QrType];
   style: QrStyle;
+  design: QrDesign;
+  // Changes when web fonts finish loading, so captions are re-measured with the real font.
+  fontsVersion: number;
 }
 
 export type PreviewModel =
@@ -29,11 +33,11 @@ export type PreviewModel =
       altText: string;
     };
 
-export function analysePreview({ type, input, style }: PreviewRequest): PreviewModel {
+export function analysePreview({ type, input, style, design }: PreviewRequest): PreviewModel {
   const build = buildPayload(type, input);
   if (!build.ok) return { state: 'incomplete' };
 
-  const rendered = renderQr(build.payload, style);
+  const rendered = renderQr(build.payload, style, design);
   const advice = capacityAdvice(rendered.capacity.byteLength, style.errorCorrection);
   if (!rendered.ok || !rendered.capacity.fits) {
     return {
@@ -48,7 +52,7 @@ export function analysePreview({ type, input, style }: PreviewRequest): PreviewM
     payload: build.payload,
     plan: rendered.plan,
     capacity: rendered.capacity,
-    scan: selfCheck(rendered.plan, build.payload),
+    scan: selfCheck(rasterize(rendered.plan), build.payload),
     contentWarnings: build.warnings,
     readabilityWarnings: readabilityWarnings({
       style,
@@ -56,6 +60,8 @@ export function analysePreview({ type, input, style }: PreviewRequest): PreviewM
       moduleSize: rendered.plan.moduleSize,
     }),
     advice,
-    altText: describeForScreenReader(type, input),
+    altText: rendered.plan.caption
+      ? `${describeForScreenReader(type, input)}, captioned “${rendered.plan.caption.text}”`
+      : describeForScreenReader(type, input),
   };
 }

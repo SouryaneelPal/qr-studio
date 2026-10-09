@@ -1,11 +1,11 @@
-import { planToPixels } from '../render/outputs';
-import type { DrawPlan } from '../render/plan';
+import type { Pixels } from '../render/outputs';
 import { decodePixels } from './decode';
 
 export type ScanCheck = { status: 'ok' } | { status: 'fail'; reason: string };
 
-export function selfCheck(plan: DrawPlan, expected: string): ScanCheck {
-  const decoded = decodePixels(planToPixels(plan));
+// Takes the final image (frame and caption included), exactly as it will be shared.
+export function selfCheck(pixels: Pixels, expected: string): ScanCheck {
+  const decoded = decodePixels(pixels);
   if (decoded === null) {
     return { status: 'fail', reason: 'A scanner couldn’t find a readable code in the image.' };
   }

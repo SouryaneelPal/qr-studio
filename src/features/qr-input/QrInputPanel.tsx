@@ -2,6 +2,7 @@ import type { BuildResult, FieldErrors, QrInputs, QrType } from '../../lib/paylo
 import { EmailForm, PhoneForm, TextForm, UrlForm, WifiForm } from './forms';
 import { TYPE_PANEL_ID as PANEL_ID, tabId } from './ids';
 import { TypeSelector } from './TypeSelector';
+import { SectionHint } from '../guide/SectionHint';
 
 interface QrInputPanelProps {
   type: QrType;
@@ -30,9 +31,16 @@ export function QrInputPanel({
 }: QrInputPanelProps) {
   return (
     <section className="panel panel--mint panel--content" aria-labelledby="content-heading">
-      <h2 id="content-heading" className="panel__title">
-        Content
-      </h2>
+      <div className="panel__header">
+        <div className="panel__heading">
+          <h2 id="content-heading" className="panel__title">
+            Content
+          </h2>
+          <SectionHint section="Content">
+            Choose what the code holds, then fill in the form. We check it as you type.
+          </SectionHint>
+        </div>
+      </div>
       <TypeSelector value={type} onChange={onTypeChange} panelId={PANEL_ID} />
       <div id={PANEL_ID} role="tabpanel" aria-labelledby={tabId(type)} className="form-stack">
         {type === 'url' && (

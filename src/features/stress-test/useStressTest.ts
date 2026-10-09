@@ -1,4 +1,5 @@
 import { useEffect, useEffectEvent, useState } from 'react';
+import { rasterize } from '../../lib/render/raster';
 import type { StressReport, StressRequest } from '../../lib/scan/stress';
 import { createStressRunner } from './stressRunner';
 
@@ -20,7 +21,8 @@ export function useStressTest(request: StressRequest | null) {
 
   function start(target: StressRequest) {
     setRunning(target);
-    void runner.run(target).then((report) => {
+    // Rendered here, where the caption fonts are loaded, then handed to the worker.
+    void runner.run({ ...target, pixels: rasterize(target.plan) }).then((report) => {
       // Only the newest request may update the panel; older runs finish silently.
       setRunning((current) => (current === target ? null : current));
       setFinished((previous) =>

@@ -6,12 +6,23 @@ import {
   SIZE_RANGE,
   type QrStyle,
 } from '../../lib/render/style';
+import type { CaptionSettings } from '../../lib/render/caption';
+import type { QrDesign } from '../../lib/render/renderQr';
+import { findSubTheme, type ThemeChoice, type ThemeId } from '../../lib/render/themes';
+import { SectionHint } from '../guide/SectionHint';
+import { CaptionControls } from './CaptionControls';
 import { ColorField } from './ColorField';
+import { ThemePicker } from './ThemePicker';
 import { PRESETS, matchesPreset } from './presets';
 
 interface StylePanelProps {
   style: QrStyle;
   onChange: (patch: Partial<QrStyle>) => void;
+  design: QrDesign;
+  payload: string | null;
+  onSelectTheme: (themeId: ThemeId) => void;
+  onSelectSubTheme: (choice: ThemeChoice) => void;
+  onCaptionChange: (patch: Partial<CaptionSettings>) => void;
 }
 
 const EC_DESCRIPTIONS: Record<ErrorCorrection, string> = {
@@ -26,12 +37,39 @@ function sliderFill(value: number, min: number, max: number): CSSProperties {
   return { '--fill': `${((value - min) / (max - min)) * 100}%` } as CSSProperties;
 }
 
-export function StylePanel({ style, onChange }: StylePanelProps) {
+export function StylePanel({
+  style,
+  onChange,
+  design,
+  payload,
+  onSelectTheme,
+  onSelectSubTheme,
+  onCaptionChange,
+}: StylePanelProps) {
   return (
     <section className="panel panel--butter panel--style" aria-labelledby="style-heading">
-      <h2 id="style-heading" className="panel__title">
-        Style
-      </h2>
+      <div className="panel__header">
+        <div className="panel__heading">
+          <h2 id="style-heading" className="panel__title">
+            Style
+          </h2>
+          <SectionHint section="Style">
+            Pick a themed frame, add a caption, then fine-tune colours, size and error correction.
+          </SectionHint>
+        </div>
+      </div>
+
+      <ThemePicker
+        value={design.theme}
+        payload={payload}
+        onSelectTheme={onSelectTheme}
+        onSelectSubTheme={onSelectSubTheme}
+      />
+      <CaptionControls
+        caption={design.caption}
+        suggestion={findSubTheme(design.theme).suggestion}
+        onChange={onCaptionChange}
+      />
 
       <fieldset className="presets">
         <legend>Presets</legend>

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { drawToCanvas } from '../../lib/render/outputs';
 import type { DrawPlan } from '../../lib/render/plan';
+import { fontsReadyFor } from '../../lib/render/raster';
 
 interface QrCanvasProps {
   plan: DrawPlan;
@@ -11,8 +12,15 @@ export function QrCanvas({ plan, altText }: QrCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    const context = canvasRef.current?.getContext('2d');
-    if (context) drawToCanvas(context, plan);
+    let current = true;
+    // Draw once the caption font is ready, so the preview never flashes a fallback font.
+    void fontsReadyFor(plan).then(() => {
+      const context = canvasRef.current?.getContext('2d');
+      if (current && context) drawToCanvas(context, plan);
+    });
+    return () => {
+      current = false;
+    };
   }, [plan]);
 
   return (
@@ -21,8 +29,8 @@ export function QrCanvas({ plan, altText }: QrCanvasProps) {
       <canvas
         ref={canvasRef}
         className="preview__canvas"
-        width={plan.size}
-        height={plan.size}
+        width={plan.width}
+        height={plan.height}
         aria-hidden="true"
         data-testid="qr-canvas"
       />

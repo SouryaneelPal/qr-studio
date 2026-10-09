@@ -1,5 +1,8 @@
 import { useMemo, useReducer } from 'react';
 import { ExportActions } from '../features/qr-export/ExportActions';
+import { HowItWorks } from '../features/guide/HowItWorks';
+import { Mascot } from '../features/guide/Mascot';
+import { ScanTips } from '../features/guide/ScanTips';
 import { HistoryPanel } from '../features/history/HistoryPanel';
 import { useHistory } from '../features/history/useHistory';
 import { QrInputPanel } from '../features/qr-input/QrInputPanel';
@@ -12,6 +15,7 @@ import { buildPayload } from '../lib/payload';
 import type { StressRequest } from '../lib/scan/stress';
 import { createEntry } from '../lib/storage/history';
 import { INITIAL_STATE, studioReducer } from './studioState';
+import { useFontsVersion } from './useFontsVersion';
 import { useTheme } from './useTheme';
 
 const PREVIEW_DELAY_MS = 100;
@@ -20,13 +24,14 @@ export function App() {
   const [state, dispatch] = useReducer(studioReducer, INITIAL_STATE);
   const history = useHistory();
   const { theme, toggle: toggleTheme } = useTheme();
+  const fontsVersion = useFontsVersion();
 
   const input = state.inputs[state.type];
   const build = useMemo(() => buildPayload(state.type, input), [state.type, input]);
 
   const request = useMemo<PreviewRequest>(
-    () => ({ type: state.type, input, style: state.style }),
-    [state.type, input, state.style],
+    () => ({ type: state.type, input, style: state.style, design: state.design, fontsVersion }),
+    [state.type, input, state.style, state.design, fontsVersion],
   );
   const shownRequest = useDebouncedValue(request, PREVIEW_DELAY_MS);
   const model = useMemo(() => analysePreview(shownRequest), [shownRequest]);
@@ -48,6 +53,7 @@ export function App() {
     history.add(
       createEntry(shownRequest.type, shownRequest.input, shownRequest.style, {
         rememberWifiPassword: state.rememberWifiPassword,
+        design: shownRequest.design,
       }),
     );
   }
@@ -55,7 +61,8 @@ export function App() {
   return (
     <div className="app">
       <header className="masthead">
-        <div>
+        <Mascot mood="wave" className="masthead__mascot" />
+        <div className="masthead__text">
           <h1 className="masthead__title">
             QR <span className="masthead__sticker">Studio</span>
           </h1>
@@ -72,6 +79,8 @@ export function App() {
           <span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span>
         </button>
       </header>
+
+      <HowItWorks />
 
       <main className="layout">
         <div className="layout__preview">
@@ -107,6 +116,11 @@ export function App() {
           <StylePanel
             style={state.style}
             onChange={(patch) => dispatch({ kind: 'edit-style', patch })}
+            design={state.design}
+            payload={build.ok ? build.payload : null}
+            onSelectTheme={(themeId) => dispatch({ kind: 'select-theme', themeId })}
+            onSelectSubTheme={(choice) => dispatch({ kind: 'select-sub-theme', choice })}
+            onCaptionChange={(patch) => dispatch({ kind: 'edit-caption', patch })}
           />
           <HistoryPanel
             entries={history.entries}
@@ -115,6 +129,7 @@ export function App() {
             onDelete={history.remove}
             onClear={history.clear}
           />
+          <ScanTips />
         </div>
       </main>
 

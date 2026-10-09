@@ -61,7 +61,7 @@ describe('outputs', () => {
   it('builds an SVG from the same plan', () => {
     const plan = readyPlan('svg check', { foreground: '#123456' });
     const svg = planToSvg(plan);
-    expect(svg).toContain(`viewBox="0 0 ${plan.size} ${plan.size}"`);
+    expect(svg).toContain(`viewBox="0 0 ${plan.width} ${plan.height}"`);
     expect(svg).toContain('fill="#123456"');
     expect(svg.match(/M\d+ \d+h\d+v\d+h-\d+z/g)).toHaveLength(plan.darkRects.length);
   });

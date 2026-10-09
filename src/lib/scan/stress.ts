@@ -1,5 +1,5 @@
 import type { ErrorCorrection } from '../capacity/capacity';
-import { contrastRatio, parseHexColor, relativeLuminance } from '../render/color';
+import { contrastRatio, parseHexColor, relativeLuminance, type Rgb } from '../render/color';
 import { planToPixels, type Pixels } from '../render/outputs';
 import type { DrawPlan, Rect } from '../render/plan';
 import { decodePixels } from './decode';
@@ -34,10 +34,16 @@ export interface Scene {
   modulePx: number;
   codeBounds: Rect;
   background: string;
+  // What shows past the image edge when it is tilted: the colour at its corner.
+  surround: Rgb;
 }
 
-export function captureScene(plan: DrawPlan): Scene {
-  const full = planToPixels(plan);
+function cornerColour(pixels: Pixels): Rgb {
+  return { r: pixels.data[0] ?? 255, g: pixels.data[1] ?? 255, b: pixels.data[2] ?? 255 };
+}
+
+// `full` is the finished image (frame and caption included); without one, the code alone is used.
+export function captureScene(plan: DrawPlan, full: Pixels = planToPixels(plan)): Scene {
   const modules = Math.round(plan.codeBounds.width / plan.moduleSize);
   // A whole-number reduction keeps every module on the same pixel grid; uneven
   // resampling alone was enough to stop jsQR reading some undamaged codes.
@@ -45,20 +51,24 @@ export function captureScene(plan: DrawPlan): Scene {
   // Start the reduction grid on the code's edge, otherwise every module edge is split
   // across two averaged pixels.
   const { codeBounds } = plan;
-  const shift = codeBounds.x % factor;
+  const shiftX = codeBounds.x % factor;
+  const shiftY = codeBounds.y % factor;
   const aligned =
-    shift === 0 ? full : crop(full, shift, shift, plan.size - shift, plan.size - shift);
+    shiftX === 0 && shiftY === 0
+      ? full
+      : crop(full, shiftX, shiftY, full.width - shiftX, full.height - shiftY);
   return {
     pixels: downscaleByFactor(aligned, factor),
     modules,
     modulePx: plan.moduleSize / factor,
     codeBounds: {
-      x: (codeBounds.x - shift) / factor,
-      y: (codeBounds.y - shift) / factor,
+      x: (codeBounds.x - shiftX) / factor,
+      y: (codeBounds.y - shiftY) / factor,
       width: Math.round(codeBounds.width / factor),
       height: Math.round(codeBounds.height / factor),
     },
     background: plan.background,
+    surround: cornerColour(full),
   };
 }
 
@@ -95,8 +105,7 @@ const CONDITIONS: readonly Condition[] = [
     id: 'tilt',
     label: 'Slight tilt',
     description: `The phone is held about ${STRESS_SETTINGS.tiltDegrees}° off straight.`,
-    apply: (scene) =>
-      rotate(scene.pixels, STRESS_SETTINGS.tiltDegrees, parseHexColor(scene.background)),
+    apply: (scene) => rotate(scene.pixels, STRESS_SETTINGS.tiltDegrees, scene.surround),
   },
   {
     id: 'smudge',
@@ -156,6 +165,8 @@ export interface StressRequest {
   payload: string;
   errorCorrection: ErrorCorrection;
   margin: number;
+  // The finished image from the page's canvas, so frames and captions are tested too.
+  pixels?: Pixels;
 }
 
 export interface ConditionResult {
@@ -223,7 +234,7 @@ export function suggestFixes(
 
 export function runStressTest(request: StressRequest): StressReport {
   const started = performance.now();
-  const scene = captureScene(request.plan);
+  const scene = captureScene(request.plan, request.pixels);
 
   const results = CONDITIONS.map((condition) => ({
     id: condition.id,
