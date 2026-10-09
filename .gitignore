@@ -9,3 +9,4 @@ CLAUDE.md
 .claude/
 .DS_Store
 design-preview/
+.vitest

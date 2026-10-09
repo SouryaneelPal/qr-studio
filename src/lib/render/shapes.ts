@@ -1,15 +1,26 @@
 import type { Rect } from './plan';
 
+export type GradientStop = [offset: number, color: string, opacity?: number];
+
 export interface LinearGradient {
   kind: 'linear';
   x1: number;
   y1: number;
   x2: number;
   y2: number;
-  stops: [offset: number, color: string][];
+  stops: GradientStop[];
 }
 
-export type Paint = string | LinearGradient;
+// Soft glows: spotlights, sun haze, screen light. Opacity per stop lets them fade to nothing.
+export interface RadialGradient {
+  kind: 'radial';
+  cx: number;
+  cy: number;
+  r: number;
+  stops: GradientStop[];
+}
+
+export type Paint = string | LinearGradient | RadialGradient;
 
 interface Painted {
   fill?: Paint;
@@ -38,14 +49,18 @@ export type Shape =
       rotation?: number;
     })
   | (Painted & { kind: 'path'; d: string; bounds: Rect; lineCap?: 'round' | 'butt' })
-  // A filled band around a hole: frames use it so nothing is ever painted behind the code.
+  // A filled shape with a hole cut out for the code. It is the only shape allowed to
+  // surround the code, which is how scenes guarantee nothing is painted behind it.
   | {
       kind: 'ring';
       outer: Rect;
       outerRadius?: number;
+      // An organic outline (cloud, heart, emblem) instead of a rectangle; `outer` is its bounds.
+      outerPath?: string;
       hole: Rect;
       holeRadius?: number;
       fill: Paint;
+      opacity?: number;
     }
   | TextShape;
 
@@ -91,6 +106,27 @@ export function linear(
 ): LinearGradient {
   const last = Math.max(1, colors.length - 1);
   return { kind: 'linear', x1, y1, x2, y2, stops: colors.map((color, i) => [i / last, color]) };
+}
+
+// A radial glow from a solid centre colour out to fully transparent.
+export function glowPaint(
+  cx: number,
+  cy: number,
+  r: number,
+  color: string,
+  solidUntil = 0,
+): RadialGradient {
+  return {
+    kind: 'radial',
+    cx,
+    cy,
+    r,
+    stops: [
+      [0, color, 1],
+      [solidUntil, color, 1],
+      [1, color, 0],
+    ],
+  };
 }
 
 function round(value: number): number {

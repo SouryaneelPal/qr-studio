@@ -1,5 +1,6 @@
 import { EMPTY_INPUTS, type QrInputs, type QrType } from '../lib/payload/types';
 import { limitCaption, type CaptionSettings } from '../lib/render/caption';
+import { MAX_BLEND } from '../lib/render/plan';
 import { DEFAULT_DESIGN, type QrDesign } from '../lib/render/renderQr';
 import { clamp, DEFAULT_STYLE, MARGIN_RANGE, SIZE_RANGE, type QrStyle } from '../lib/render/style';
 import { findSubTheme, findTheme, type ThemeChoice, type ThemeId } from '../lib/render/themes';
@@ -22,6 +23,7 @@ export type StudioAction =
   | { kind: 'select-theme'; themeId: ThemeId }
   | { kind: 'select-sub-theme'; choice: ThemeChoice }
   | { kind: 'edit-caption'; patch: Partial<CaptionSettings> }
+  | { kind: 'set-blend'; blend: number }
   | { kind: 'set-remember-wifi-password'; remember: boolean }
   | { kind: 'restore'; entry: HistoryEntry };
 
@@ -85,6 +87,8 @@ export function studioReducer(state: StudioState, action: StudioAction): StudioS
         design: { ...state.design, caption: { ...caption, text: limitCaption(caption.text) } },
       };
     }
+    case 'set-blend':
+      return { ...state, design: { ...state.design, blend: clamp(action.blend, 0, MAX_BLEND) } };
     case 'set-remember-wifi-password':
       return { ...state, rememberWifiPassword: action.remember };
     case 'restore': {
@@ -94,7 +98,11 @@ export function studioReducer(state: StudioState, action: StudioAction): StudioS
         type: entry.type,
         inputs: { ...state.inputs, [entry.type]: { ...entry.input } },
         style: { ...entry.style },
-        design: { theme: { ...entry.design.theme }, caption: { ...entry.design.caption } },
+        design: {
+          theme: { ...entry.design.theme },
+          caption: { ...entry.design.caption },
+          blend: entry.design.blend,
+        },
         rememberWifiPassword:
           entry.type === 'wifi' && !entry.passwordOmitted && entry.input.password !== '',
         wifiPasswordNeeded: entry.passwordOmitted,

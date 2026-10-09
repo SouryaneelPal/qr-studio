@@ -8,18 +8,25 @@ type Surface = {
   read: () => Pixels;
 };
 
+// A plain object rather than ImageData, so it can be copied, spread and sent to a worker safely.
+function plainPixels(image: ImageData): Pixels {
+  return { data: image.data, width: image.width, height: image.height };
+}
+
 function createSurface(width: number, height: number): Surface | null {
   try {
     if (typeof OffscreenCanvas !== 'undefined') {
       const context = new OffscreenCanvas(width, height).getContext('2d');
-      if (context) return { context, read: () => context.getImageData(0, 0, width, height) };
+      if (context)
+        return { context, read: () => plainPixels(context.getImageData(0, 0, width, height)) };
     }
     if (typeof document !== 'undefined') {
       const canvas = document.createElement('canvas');
       canvas.width = width;
       canvas.height = height;
       const context = canvas.getContext('2d');
-      if (context) return { context, read: () => context.getImageData(0, 0, width, height) };
+      if (context)
+        return { context, read: () => plainPixels(context.getImageData(0, 0, width, height)) };
     }
   } catch {
     // Fall through to the canvas-free rasteriser.
@@ -27,7 +34,7 @@ function createSurface(width: number, height: number): Surface | null {
   return null;
 }
 
-// The pixels a camera would see: the exact canvas image, frame and caption included.
+// The pixels a camera would see: the exact canvas image, scene and caption included.
 // Without a canvas (unit tests) it falls back to the code-only rasteriser.
 export function rasterize(plan: DrawPlan): Pixels {
   const surface = createSurface(plan.width, plan.height);

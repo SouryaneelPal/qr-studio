@@ -18,6 +18,8 @@ export type ConditionId = 'blur' | 'small-print' | 'low-light' | 'tilt' | 'smudg
 
 export const STRESS_SETTINGS = {
   cameraModulePx: 6,
+  // How much scene the camera sees around the code, as a fraction of the code's width per side.
+  cameraFraming: 0.5,
   blurModules: 1,
   printedModulePx: 1.5,
   lowLight: { contrast: 0.35, brightness: 0.6, noise: 10 },
@@ -43,32 +45,44 @@ function cornerColour(pixels: Pixels): Rgb {
 }
 
 // `full` is the finished image (frame and caption included); without one, the code alone is used.
+// The camera's view: the code plus a border of scene on every side, as when someone points a
+// phone at a poster. The border is a fraction of the code's width, clamped to the image, and
+// starts on the reduction grid so module edges are never split across averaged pixels.
+function framing(plan: DrawPlan, full: Pixels, factor: number): Rect {
+  const { codeBounds } = plan;
+  const border = codeBounds.width * STRESS_SETTINGS.cameraFraming;
+  const steps = (start: number) => Math.floor(Math.min(start, border) / factor) * factor;
+  const x = codeBounds.x - steps(codeBounds.x);
+  const y = codeBounds.y - steps(codeBounds.y);
+  const right = Math.min(full.width, codeBounds.x + codeBounds.width + border);
+  const bottom = Math.min(full.height, codeBounds.y + codeBounds.height + border);
+  return { x, y, width: Math.round(right - x), height: Math.round(bottom - y) };
+}
+
+// `full` is the finished image (scene and caption included); without one, the code alone is used.
 export function captureScene(plan: DrawPlan, full: Pixels = planToPixels(plan)): Scene {
   const modules = Math.round(plan.codeBounds.width / plan.moduleSize);
   // A whole-number reduction keeps every module on the same pixel grid; uneven
   // resampling alone was enough to stop jsQR reading some undamaged codes.
   const factor = Math.max(1, Math.round(plan.moduleSize / STRESS_SETTINGS.cameraModulePx));
-  // Start the reduction grid on the code's edge, otherwise every module edge is split
-  // across two averaged pixels.
-  const { codeBounds } = plan;
-  const shiftX = codeBounds.x % factor;
-  const shiftY = codeBounds.y % factor;
-  const aligned =
-    shiftX === 0 && shiftY === 0
+  const view = framing(plan, full, factor);
+  const framed =
+    view.x === 0 && view.y === 0 && view.width === full.width && view.height === full.height
       ? full
-      : crop(full, shiftX, shiftY, full.width - shiftX, full.height - shiftY);
+      : crop(full, view.x, view.y, view.width, view.height);
+  const { codeBounds } = plan;
   return {
-    pixels: downscaleByFactor(aligned, factor),
+    pixels: downscaleByFactor(framed, factor),
     modules,
     modulePx: plan.moduleSize / factor,
     codeBounds: {
-      x: (codeBounds.x - shiftX) / factor,
-      y: (codeBounds.y - shiftY) / factor,
+      x: (codeBounds.x - view.x) / factor,
+      y: (codeBounds.y - view.y) / factor,
       width: Math.round(codeBounds.width / factor),
       height: Math.round(codeBounds.height / factor),
     },
     background: plan.background,
-    surround: cornerColour(full),
+    surround: cornerColour(framed),
   };
 }
 

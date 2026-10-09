@@ -8,6 +8,7 @@ import {
 } from '../../lib/render/style';
 import type { CaptionSettings } from '../../lib/render/caption';
 import type { QrDesign } from '../../lib/render/renderQr';
+import { MAX_BLEND } from '../../lib/render/plan';
 import { findSubTheme, type ThemeChoice, type ThemeId } from '../../lib/render/themes';
 import { SectionHint } from '../guide/SectionHint';
 import { CaptionControls } from './CaptionControls';
@@ -23,6 +24,7 @@ interface StylePanelProps {
   onSelectTheme: (themeId: ThemeId) => void;
   onSelectSubTheme: (choice: ThemeChoice) => void;
   onCaptionChange: (patch: Partial<CaptionSettings>) => void;
+  onBlendChange: (blend: number) => void;
 }
 
 const EC_DESCRIPTIONS: Record<ErrorCorrection, string> = {
@@ -45,7 +47,11 @@ export function StylePanel({
   onSelectTheme,
   onSelectSubTheme,
   onCaptionChange,
+  onBlendChange,
 }: StylePanelProps) {
+  const isPlain = design.theme.themeId === 'classic' && design.theme.subThemeId === 'plain';
+  const blendPercent = Math.round(design.blend * 100);
+  const maxBlendPercent = Math.round(MAX_BLEND * 100);
   return (
     <section className="panel panel--butter panel--style" aria-labelledby="style-heading">
       <div className="panel__header">
@@ -65,6 +71,31 @@ export function StylePanel({
         onSelectTheme={onSelectTheme}
         onSelectSubTheme={onSelectSubTheme}
       />
+      <div className="range-field">
+        <label htmlFor="style-blend">
+          Blend{' '}
+          <output htmlFor="style-blend" className="mono">
+            {blendPercent}%
+          </output>
+        </label>
+        <input
+          id="style-blend"
+          type="range"
+          min={0}
+          max={maxBlendPercent}
+          step={1}
+          value={blendPercent}
+          disabled={isPlain}
+          aria-describedby="style-blend-hint"
+          style={sliderFill(blendPercent, 0, maxBlendPercent)}
+          onChange={(event) => onBlendChange(Number(event.target.value) / 100)}
+        />
+        <p id="style-blend-hint" className="field__hint">
+          {isPlain
+            ? 'Pick a scene to blend its colours into the code’s background.'
+            : `Tints the light area behind the code with the scene’s colour, up to ${maxBlendPercent}% so it still scans.`}
+        </p>
+      </div>
       <CaptionControls
         caption={design.caption}
         suggestion={findSubTheme(design.theme).suggestion}

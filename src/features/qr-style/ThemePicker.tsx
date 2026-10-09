@@ -28,7 +28,7 @@ function thumbnail(choice: ThemeChoice, payload: string | null): string {
     background: sub.qr.background,
     errorCorrection: 'L' as const,
   };
-  const design = { theme: choice, caption: DEFAULT_CAPTION };
+  const design = { theme: choice, caption: DEFAULT_CAPTION, blend: 0 };
   const attempt = payload ? renderQr(payload, style, design) : null;
   const rendered = attempt?.ok ? attempt : renderQr(SAMPLE, style, design);
   return rendered.ok

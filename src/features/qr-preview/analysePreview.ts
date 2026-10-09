@@ -55,7 +55,8 @@ export function analysePreview({ type, input, style, design }: PreviewRequest): 
     scan: selfCheck(rasterize(rendered.plan), build.payload),
     contentWarnings: build.warnings,
     readabilityWarnings: readabilityWarnings({
-      style,
+      // Judge contrast against the surface actually drawn, after any blend.
+      style: { ...style, background: rendered.plan.background },
       version: rendered.matrix.version,
       moduleSize: rendered.plan.moduleSize,
     }),

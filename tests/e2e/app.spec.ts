@@ -113,7 +113,7 @@ test('downloaded PNG matches the chosen size and decodes back to the payload', a
   expect(result.text).toBe('Download check ✓');
 });
 
-test('themed PNGs with custom captions decode back to the payload', async ({ page }) => {
+test('scene PNGs with custom captions decode back to the payload', async ({ page }) => {
   const payload = 'https://gdg.community.dev/srm';
   await page.getByLabel('Web address').fill(payload);
 
@@ -132,7 +132,7 @@ test('themed PNGs with custom captions decode back to the payload', async ({ pag
 
     const result = await downloadAndDecode(page);
     expect(result.width).toBe(512);
-    expect(result.height, 'the frame and caption make the image taller').toBeGreaterThan(512);
+    expect(result.height, 'scenes stay square, caption included').toBe(512);
     expect(result.text, `${design.theme} / ${design.subTheme}`).toBe(payload);
   }
 });

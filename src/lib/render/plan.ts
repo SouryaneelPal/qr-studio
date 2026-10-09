@@ -5,11 +5,13 @@ import {
   type CaptionSettings,
   type MeasureText,
 } from './caption';
+import { mixColours } from './color';
 import type { QrMatrix } from './matrix';
-import { rect, seededRandom, type Shape, type TextShape } from './shapes';
+import { seededRandom, type Shape, type TextShape } from './shapes';
 import type { QrStyle } from './style';
 import { plain } from './themes/classic';
-import type { FrameContext, SubTheme } from './themes/types';
+import { keepClear } from './themes/kit';
+import type { SceneContext, SubTheme } from './themes/types';
 
 export interface Rect {
   x: number;
@@ -22,29 +24,37 @@ export interface DrawPlan {
   width: number;
   height: number;
   moduleSize: number;
+  // The code's surface colour: its background, after any blend.
   background: string;
   foreground: string;
-  // The plain light area behind the code, quiet zone included. Frames never paint here.
+  // The solid light area behind the code, quiet zone included. Scene art never paints here.
   tile: Rect;
   // Where the symbol itself sits inside the image, excluding the quiet zone.
   codeBounds: Rect;
   darkRects: Rect[];
-  frame: Shape[];
+  scene: Shape[];
   caption: TextShape | null;
 }
 
 export type PlanResult = { ok: true; plan: DrawPlan } | { ok: false; error: string };
 
-export interface FrameRequest {
+export interface SceneRequest {
   subTheme: SubTheme;
   caption: CaptionSettings;
+  // How much of the scene's tint to mix into the code's surface, 0 to MAX_BLEND.
+  blend: number;
   measure?: MeasureText;
 }
 
-// Scanners need a quiet zone; a busy frame makes that even more true, so framed codes keep at least this.
-export const MIN_FRAMED_MARGIN = 4;
+// Scanners need a quiet zone; busy art next to the code makes that even more true.
+export const MIN_SCENE_MARGIN = 4;
 
-const NO_FRAME: FrameRequest = { subTheme: plain, caption: DEFAULT_CAPTION };
+// The highest blend proven (by the scene tests) to keep every scene decodable and at
+// least 4 of 5 stress conditions passing.
+export const MAX_BLEND = 0.25;
+
+const PLAIN_CAPTION_STRIP = 0.13;
+const NO_SCENE: SceneRequest = { subTheme: plain, caption: DEFAULT_CAPTION, blend: 0 };
 
 function seedFor(id: string): number {
   let hash = 2166136261;
@@ -74,97 +84,118 @@ function codeRects(matrix: QrMatrix, originX: number, originY: number, moduleSiz
   return rects;
 }
 
-// Lays out frame, caption strip and code. The image is `style.size` wide; a frame or caption
-// makes it taller. Whole-pixel modules keep edges crisp in every output, and leftover pixels
-// widen the quiet zone evenly.
+interface Layout {
+  tile: Rect;
+  caption: Rect | null;
+  margin: number;
+  surface: string;
+}
+
+// Plain has no scene: the code fills the image, shrinking only to make room for a caption.
+function plainLayout(
+  size: number,
+  style: QrStyle,
+  caption: CaptionSettings,
+  shown: boolean,
+): Layout {
+  const strip = shown ? Math.round(size * PLAIN_CAPTION_STRIP) : 0;
+  const tileSize = size - strip;
+  const onTop = caption.position === 'top';
+  const tile = {
+    x: Math.round((size - tileSize) / 2),
+    y: onTop ? strip : 0,
+    width: tileSize,
+    height: tileSize,
+  };
+  const captionBox = shown
+    ? {
+        x: Math.round(size * 0.05),
+        y: onTop ? 0 : tileSize,
+        width: Math.round(size * 0.9),
+        height: strip,
+      }
+    : null;
+  return { tile, caption: captionBox, margin: style.margin, surface: style.background };
+}
+
+// Scenes centre the code and leave the space above and below for the art and the caption.
+function sceneLayout(size: number, style: QrStyle, request: SceneRequest, shown: boolean): Layout {
+  const { subTheme, caption, blend } = request;
+  const tileSize = Math.round(size * subTheme.codeScale);
+  const offset = Math.round((size - tileSize) / 2);
+  const tile = { x: offset, y: offset, width: tileSize, height: tileSize };
+  const height = Math.round(Math.min(size * 0.1, offset * 0.62));
+  const width = Math.round(size * 0.7);
+  const y =
+    caption.position === 'top'
+      ? Math.round((offset - height) / 2)
+      : offset + tileSize + Math.round((size - offset - tileSize - height) / 2);
+  return {
+    tile,
+    caption: shown ? { x: Math.round((size - width) / 2), y, width, height } : null,
+    margin: Math.max(MIN_SCENE_MARGIN, style.margin),
+    surface: mixColours(style.background, subTheme.tint, Math.min(MAX_BLEND, Math.max(0, blend))),
+  };
+}
+
+// Lays out the scene, caption and code in a square image `style.size` wide. Whole-pixel modules
+// keep edges crisp in every output, and leftover pixels widen the quiet zone evenly.
 export function planDrawing(
   matrix: QrMatrix,
   style: QrStyle,
-  frame: FrameRequest = NO_FRAME,
+  request: SceneRequest = NO_SCENE,
 ): PlanResult {
-  const { subTheme, caption } = frame;
-  const width = style.size;
-  const px = (fraction: number) => Math.round(width * fraction);
-  const left = px(subTheme.insets.left);
-  const right = px(subTheme.insets.right);
-  const topInset = px(subTheme.insets.top);
-  const bottomInset = px(subTheme.insets.bottom);
-  const tileSize = width - left - right;
+  const { subTheme, caption } = request;
+  const size = style.size;
+  const isPlain = subTheme === plain;
+  const shown = caption.enabled && caption.text.trim() !== '';
+  const layout = isPlain
+    ? plainLayout(size, style, caption, shown)
+    : sceneLayout(size, style, request, shown);
+  const { tile } = layout;
 
-  const framed = subTheme !== plain;
-  const margin = framed ? Math.max(MIN_FRAMED_MARGIN, style.margin) : style.margin;
-  const modulesAcross = matrix.size + 2 * margin;
-  const moduleSize = Math.floor(tileSize / modulesAcross);
+  const modulesAcross = matrix.size + 2 * layout.margin;
+  const moduleSize = Math.floor(tile.width / modulesAcross);
   if (moduleSize < 1) {
+    const needed = Math.ceil((modulesAcross * size) / tile.width);
     return {
       ok: false,
-      error: framed
-        ? `This code needs an image at least ${Math.ceil(modulesAcross / (1 - subTheme.insets.left - subTheme.insets.right))} px wide in this frame. Increase the size or choose Classic / Plain.`
-        : `This code needs at least ${modulesAcross} px to draw. Increase the size or reduce the margin.`,
+      error: isPlain
+        ? `This code needs at least ${needed} px to draw. Increase the size or reduce the margin.`
+        : `This code needs an image at least ${needed} px wide in this scene. Increase the size or choose Classic / Plain.`,
     };
   }
 
-  const captionShown = caption.enabled && caption.text.trim() !== '';
-  const strip = captionShown ? px(subTheme.captionBand) : 0;
-  const onTop = caption.position === 'top';
-  const tileY = topInset + (onTop ? strip : 0);
-  const height = topInset + strip + tileSize + bottomInset;
-  const tile = { x: left, y: tileY, width: tileSize, height: tileSize };
-  const captionBox = captionShown
-    ? { x: left, y: onTop ? topInset : tileY + tileSize, width: tileSize, height: strip }
-    : null;
-
-  const aboveCode = captionBox && onTop ? captionBox.y : tile.y;
-  const belowCode = captionBox && !onTop ? captionBox.y + captionBox.height : tile.y + tile.height;
-  const context: FrameContext = {
-    width,
-    height,
+  const context: SceneContext = {
+    size,
     tile,
-    caption: captionBox,
+    surface: layout.surface,
+    caption: layout.caption,
     captionPosition: caption.position,
-    edges: {
-      top: { x: 0, y: 0, width, height: aboveCode },
-      bottom: { x: 0, y: belowCode, width, height: height - belowCode },
-      left: { x: 0, y: aboveCode, width: left, height: belowCode - aboveCode },
-      right: {
-        x: tile.x + tile.width,
-        y: aboveCode,
-        width: width - tile.x - tile.width,
-        height: belowCode - aboveCode,
-      },
-    },
     style,
     random: seededRandom(seedFor(subTheme.id)),
   };
-
-  const shapes = subTheme.decorate(context);
+  const scene = keepClear(tile, subTheme.paint(context));
   const look = {
     family: subTheme.caption.family,
     weight: subTheme.caption.weight,
     color: subTheme.caption.color ?? style.foreground,
     stroke: subTheme.caption.stroke,
   };
-  if (captionBox && subTheme.caption.band) {
-    shapes.push(
-      rect(captionBox.x, captionBox.y, captionBox.width, captionBox.height, {
-        fill: subTheme.caption.band,
-      }),
-    );
-  }
-  const captionShape = captionBox
-    ? fitCaption(caption.text, captionBox, look, frame.measure ?? measureText)
+  const captionShape = layout.caption
+    ? fitCaption(caption.text, layout.caption, look, request.measure ?? measureText)
     : null;
 
-  const offset = Math.floor((tileSize - moduleSize * matrix.size) / 2);
+  const offset = Math.floor((tile.width - moduleSize * matrix.size) / 2);
   const codeX = tile.x + offset;
   const codeY = tile.y + offset;
   return {
     ok: true,
     plan: {
-      width,
-      height,
+      width: size,
+      height: size,
       moduleSize,
-      background: style.background,
+      background: layout.surface,
       foreground: style.foreground,
       tile,
       codeBounds: {
@@ -174,7 +205,7 @@ export function planDrawing(
         height: moduleSize * matrix.size,
       },
       darkRects: codeRects(matrix, codeX, codeY, moduleSize),
-      frame: shapes,
+      scene,
       caption: captionShape,
     },
   };

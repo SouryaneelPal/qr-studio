@@ -8,9 +8,11 @@ import { findSubTheme, PLAIN_THEME, type ThemeChoice } from './themes';
 export interface QrDesign {
   theme: ThemeChoice;
   caption: CaptionSettings;
+  // How much scene colour tints the code's surface, 0 to MAX_BLEND.
+  blend: number;
 }
 
-export const DEFAULT_DESIGN: QrDesign = { theme: PLAIN_THEME, caption: DEFAULT_CAPTION };
+export const DEFAULT_DESIGN: QrDesign = { theme: PLAIN_THEME, caption: DEFAULT_CAPTION, blend: 0 };
 
 export type RenderResult =
   | { ok: true; matrix: QrMatrix; plan: DrawPlan; capacity: CapacityReport }
@@ -38,6 +40,7 @@ export function renderQr(
   const planned = planDrawing(matrix, style, {
     subTheme: findSubTheme(design.theme),
     caption: design.caption,
+    blend: design.blend,
     measure,
   });
   if (!planned.ok) return { ok: false, error: planned.error, capacity };
