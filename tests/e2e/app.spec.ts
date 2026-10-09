@@ -126,6 +126,25 @@ test('recent codes survive a reload', async ({ page }) => {
   await expectScans(page);
 });
 
+test('stress test runs and reports each condition', async ({ page }) => {
+  await chooseType(page, 'Text');
+  await page.getByLabel('Your text').fill('Hello GDG');
+  await expectScans(page);
+  await page.getByRole('button', { name: 'Run stress test' }).click();
+
+  const summary = page.getByTestId('stress-summary');
+  await expect(summary).toContainText('Survives 5/5 real-world conditions');
+  const rows = page.getByRole('list', { name: 'Stress test results' }).getByRole('listitem');
+  await expect(rows).toHaveCount(5);
+  await expect(rows.filter({ hasText: 'Passed' })).toHaveCount(5);
+
+  // Editing re-runs it automatically: level L cannot rebuild the smudged corner.
+  await page.getByRole('radio', { name: /^L/ }).check();
+  await expect(summary).toContainText('Survives 4/5 real-world conditions');
+  await expect(rows.filter({ hasText: 'Smudged corner' })).toContainText('Failed');
+  await expect(page.getByText(/Raise error correction to Q or H/)).toBeVisible();
+});
+
 test('no horizontal overflow at 360 px wide', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 780 });
   await page.getByLabel('Web address').fill(`example.com/${'very-long-path-segment-'.repeat(8)}`);
@@ -159,6 +178,8 @@ test('makes no network requests after the page loads', async ({ page }) => {
   await page.getByLabel('Password', { exact: true }).fill('correct horse');
   await expectScans(page);
   await page.getByRole('button', { name: /Midnight/ }).click();
+  await page.getByRole('button', { name: 'Run stress test' }).click();
+  await expect(page.getByTestId('stress-summary')).toContainText(/Survives \d\/5/);
   await Promise.all([
     page.waitForEvent('download'),
     page.getByRole('button', { name: 'Download PNG' }).click(),

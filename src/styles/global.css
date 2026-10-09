@@ -803,3 +803,82 @@ legend {
   width: 100%;
   max-width: 22rem;
 }
+
+/* Stress test */
+
+.stress__summary {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.stress__summary--stale {
+  color: var(--ink-soft);
+}
+
+.stress__results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.stress__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+}
+
+.stress__badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 5.2rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.stress__badge--pass {
+  background: var(--ok-wash);
+  color: var(--ink);
+  border: 1px solid var(--ok);
+}
+
+.stress__badge--fail {
+  background: var(--fail-wash);
+  color: var(--ink);
+  border: 1px dashed var(--fail);
+}
+
+.stress__text {
+  display: grid;
+  min-width: 0;
+}
+
+.stress__description {
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+}
+
+.stress__fixes {
+  padding: 0.7rem 0.9rem;
+  border-left: 3px solid var(--warn-rule);
+  background: var(--warn-wash);
+  border-radius: 4px;
+}
+
+.stress__timing {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

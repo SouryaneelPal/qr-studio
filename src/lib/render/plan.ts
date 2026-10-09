@@ -13,6 +13,8 @@ export interface DrawPlan {
   moduleSize: number;
   background: string;
   foreground: string;
+  // Where the symbol itself sits inside the image, excluding the quiet zone.
+  codeBounds: Rect;
   darkRects: Rect[];
 }
 
@@ -57,6 +59,12 @@ export function planDrawing(matrix: QrMatrix, style: QrStyle): PlanResult {
       moduleSize,
       background: style.background,
       foreground: style.foreground,
+      codeBounds: {
+        x: offset,
+        y: offset,
+        width: moduleSize * matrix.size,
+        height: moduleSize * matrix.size,
+      },
       darkRects,
     },
   };

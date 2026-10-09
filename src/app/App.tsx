@@ -6,8 +6,10 @@ import { QrInputPanel } from '../features/qr-input/QrInputPanel';
 import { analysePreview, type PreviewRequest } from '../features/qr-preview/analysePreview';
 import { QrPreview } from '../features/qr-preview/QrPreview';
 import { StylePanel } from '../features/qr-style/StylePanel';
+import { StressTestPanel } from '../features/stress-test/StressTestPanel';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { buildPayload } from '../lib/payload';
+import type { StressRequest } from '../lib/scan/stress';
 import { createEntry } from '../lib/storage/history';
 import { INITIAL_STATE, studioReducer } from './studioState';
 import { useTheme } from './useTheme';
@@ -28,6 +30,18 @@ export function App() {
   );
   const shownRequest = useDebouncedValue(request, PREVIEW_DELAY_MS);
   const model = useMemo(() => analysePreview(shownRequest), [shownRequest]);
+  const stressRequest = useMemo<StressRequest | null>(
+    () =>
+      model.state === 'ready'
+        ? {
+            plan: model.plan,
+            payload: model.payload,
+            errorCorrection: shownRequest.style.errorCorrection,
+            margin: shownRequest.style.margin,
+          }
+        : null,
+    [model, shownRequest.style],
+  );
 
   // Save what is on screen, which may lag the form by the debounce delay.
   function saveShownToHistory() {
@@ -72,6 +86,7 @@ export function App() {
               )
             }
           />
+          <StressTestPanel request={stressRequest} />
         </div>
 
         <div className="layout__controls">
