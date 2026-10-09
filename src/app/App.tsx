@@ -121,6 +121,7 @@ export function App() {
             onSelectTheme={(themeId) => dispatch({ kind: 'select-theme', themeId })}
             onSelectSubTheme={(choice) => dispatch({ kind: 'select-sub-theme', choice })}
             onCaptionChange={(patch) => dispatch({ kind: 'edit-caption', patch })}
+            onBlendChange={(blend) => dispatch({ kind: 'set-blend', blend })}
           />
           <HistoryPanel
             entries={history.entries}

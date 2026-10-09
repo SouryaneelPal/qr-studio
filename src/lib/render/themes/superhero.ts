@@ -1,66 +1,65 @@
 import type { Rect } from '../plan';
-import { circle, linear, path, rect, type Shape } from '../shapes';
+import { circle, glowPaint, linear, path, rect, type Shape } from '../shapes';
 import {
+  around,
+  backdrop,
   bolt,
-  clearPoints,
+  brokenLine,
+  centre,
+  cloud,
   compact,
   crack,
-  isClear,
-  outline,
-  perimeterPoints,
-  ring,
+  feather,
+  grow,
+  organic,
+  pointsAround,
+  rays,
+  ribbon,
   scatter,
-  star,
-  thinnestEdge,
+  sign,
+  ticker,
 } from './kit';
-import { CAPTION_FAMILIES, type FrameContext, type SubTheme, type Theme } from './types';
+import { CAPTION_FAMILIES, type SceneContext, type SubTheme, type Theme } from './types';
 
-const even = (value: number) => ({ top: value, right: value, bottom: value, left: value });
 const arcade = CAPTION_FAMILIES.arcade;
 
-// A plain heraldic kite shield with a chevron: a generic emblem, not any character's.
-function badge(
-  cx: number,
-  cy: number,
-  size: number,
-  field: string,
-  chevron: string,
-  edge: string,
-): Shape[] {
-  const s = size / 2;
-  const outlinePath = path()
-    .moveTo(cx - s, cy - s)
-    .lineTo(cx + s, cy - s)
-    .lineTo(cx + s, cy)
-    .quadTo(cx + s, cy + s * 0.8, cx, cy + s * 1.2)
-    .quadTo(cx - s, cy + s * 0.8, cx - s, cy)
-    .close();
-  return [
-    outlinePath.shape({ fill: field, stroke: edge, lineWidth: Math.max(1.5, size * 0.07) }),
-    path()
-      .polygon([
-        [cx - s * 0.7, cy + s * 0.15],
-        [cx, cy - s * 0.45],
-        [cx + s * 0.7, cy + s * 0.15],
-        [cx + s * 0.7, cy + s * 0.5],
-        [cx, cy - s * 0.1],
-        [cx - s * 0.7, cy + s * 0.5],
-      ])
-      .shape({ fill: chevron }),
-  ];
+// A heraldic kite shield around the code: flat top, straight sides, curving to a point.
+function kiteShield(scene: SceneContext, pad: number, depth: number): Shape {
+  const { x, y, width, height } = scene.tile;
+  const [cx] = centre(scene.tile);
+  const left = x - pad;
+  const right = x + width + pad;
+  const shoulder = y + height + pad * 0.3;
+  const point = y + height + pad + depth;
+  return path()
+    .moveTo(left, y - pad)
+    .lineTo(right, y - pad)
+    .lineTo(right, shoulder)
+    .quadTo(right, point - depth * 0.35, cx, point)
+    .quadTo(left, point - depth * 0.35, left, shoulder)
+    .close()
+    .shape({});
 }
 
-function edgeStripes(context: FrameContext, colours: [string, string], thickness: number): Shape[] {
-  const shapes: Shape[] = [];
-  const points = perimeterPoints(context, thickness / 2, thickness * 1.2);
-  points.forEach(([x, y], i) => {
-    if (isClear(context, x, y, thickness / 2, 0)) {
-      shapes.push(
-        rect(x - thickness / 2, y - thickness / 2, thickness, thickness, { fill: colours[i % 2] }),
-      );
-    }
-  });
-  return shapes;
+// An eight-sided plate with bevelled corners around the code.
+function octagon(scene: SceneContext, pad: number, cut: number): Shape {
+  const { x, y, width, height } = scene.tile;
+  const x0 = x - pad;
+  const y0 = y - pad;
+  const x1 = x + width + pad;
+  const y1 = y + height + pad;
+  return path()
+    .polygon([
+      [x0 + cut, y0],
+      [x1 - cut, y0],
+      [x1, y0 + cut],
+      [x1, y1 - cut],
+      [x1 - cut, y1],
+      [x0 + cut, y1],
+      [x0, y1 - cut],
+      [x0, y0 + cut],
+    ])
+    .shape({});
 }
 
 const shield: SubTheme = {
@@ -68,121 +67,163 @@ const shield: SubTheme = {
   name: 'Shield',
   swatch: ['#1d3a8a', '#d62828'],
   qr: { foreground: '#0b1f4d', background: '#ffffff', errorCorrection: 'M' },
-  insets: even(0.1),
-  captionBand: 0.12,
+  tint: '#5b7bd6',
+  codeScale: 0.56,
   caption: { family: arcade, weight: 400, color: '#ffffff' },
   suggestion: 'Ready for duty',
-  decorate(context) {
-    const w = context.width;
-    const edge = thinnestEdge(context);
-    const stripe = Math.max(4, Math.round(edge * 0.32));
+  paint(scene) {
+    const w = scene.size;
+    const [cx, cy] = centre(scene.tile);
+    const half = scene.tile.width / 2;
     const shapes: Shape[] = [
-      ring(context, linear(0, 0, 0, context.height, '#24459e', '#16306f')),
-      ...edgeStripes(context, ['#d62828', '#ffffff'], stripe),
+      backdrop(scene, glowPaint(cx, cy, w * 0.8, '#2b4fb3')),
+      backdrop(scene, {
+        kind: 'radial',
+        cx,
+        cy,
+        r: w * 0.8,
+        stops: [
+          [0, '#1d3a8a', 0],
+          [0.55, '#1d3a8a', 0.5],
+          [1, '#0d1f52', 1],
+        ],
+      }),
+      ...rays(scene, 28, half * 1.55, ['#4a72e0', '#ffffff'], 0.5, 0.18),
     ];
-    for (const [x, y] of clearPoints(
-      context,
-      perimeterPoints(context, stripe + edge * 0.3, edge * 0.9),
-      edge * 0.18,
-    )) {
-      shapes.push(star(x, y, edge * 0.16, 0.42, 5, '#ffffff'));
-    }
-    const top = context.edges.top;
-    if (top.height >= edge) {
-      shapes.push(
-        ...badge(
-          w / 2,
-          top.y + top.height / 2 - edge * 0.05,
-          Math.min(top.height * 0.55, w * 0.08),
-          '#d62828',
-          '#ffffff',
-          '#ffffff',
-        ),
-      );
-    }
+    for (const [x, y] of scatter(scene, 22, w * 0.018)) shapes.push(...starAt(x, y, w * 0.016));
+    shapes.push(
+      organic(scene, kiteShield(scene, w * 0.075, w * 0.12), '#d62828'),
+      organic(scene, kiteShield(scene, w * 0.058, w * 0.1), '#ffffff'),
+      organic(scene, kiteShield(scene, w * 0.044, w * 0.085), '#1d3a8a'),
+      organic(scene, kiteShield(scene, w * 0.026, w * 0.062), scene.surface),
+    );
+    shapes.push(...ribbon(scene, '#d62828', '#8f1414', '#ffffff'));
     return shapes;
   },
 };
 
+function starAt(x: number, y: number, r: number): Shape[] {
+  const corners: [number, number][] = [];
+  for (let i = 0; i < 10; i++) {
+    const radius = i % 2 === 0 ? r : r * 0.42;
+    const angle = -Math.PI / 2 + (i * Math.PI) / 5;
+    corners.push([x + Math.cos(angle) * radius, y + Math.sin(angle) * radius]);
+  }
+  return [path().polygon(corners).shape({ fill: '#ffffff', opacity: 0.85 })];
+}
+
 const iron: SubTheme = {
   id: 'iron',
   name: 'Iron',
-  swatch: ['#9b1c1c', '#d4a017'],
+  swatch: ['#8b1e1e', '#d4a017'],
   qr: { foreground: '#3b0a0a', background: '#fff8e7', errorCorrection: 'M' },
-  insets: even(0.1),
-  captionBand: 0.12,
+  tint: '#e8a33c',
+  codeScale: 0.56,
   caption: { family: arcade, weight: 400, color: '#ffd166' },
   suggestion: 'Suit up & scan',
-  decorate(context) {
-    const w = context.width;
-    const h = context.height;
-    const edge = thinnestEdge(context);
-    const shapes: Shape[] = [ring(context, linear(0, 0, w, h, '#a3201f', '#6e1313'))];
-    // Angular gold plates in each corner square, like overlapping armour.
-    const plate = edge * 0.95;
-    const corners: [number, number, number, number][] = [
+  paint(scene) {
+    const w = scene.size;
+    const shapes: Shape[] = [backdrop(scene, linear(0, 0, w, w, '#a3201f', '#5e1010', '#8b1e1e'))];
+    // Armour seams: angular lines cutting across the plating.
+    const line = Math.max(1.5, w * 0.004);
+    for (let i = 0; i < 7; i++) {
+      const y = (i + 0.5) * (w / 7);
+      shapes.push(
+        ...brokenLine(0, y, w * 0.3, y + w * 0.06, 4, '#4d0c0c', line),
+        ...brokenLine(w * 0.7, y + w * 0.06, w, y, 4, '#4d0c0c', line),
+      );
+    }
+    // Gold plates in each corner of the image.
+    const plate = w * 0.16;
+    for (const [ox, oy, dx, dy] of [
       [0, 0, 1, 1],
       [w, 0, -1, 1],
-      [0, h, 1, -1],
-      [w, h, -1, -1],
-    ];
-    for (const [cx, cy, dx, dy] of corners) {
+      [0, w, 1, -1],
+      [w, w, -1, -1],
+    ] as const) {
       shapes.push(
         path()
           .polygon([
-            [cx, cy],
-            [cx + dx * plate, cy],
-            [cx + dx * plate, cy + dy * plate * 0.45],
-            [cx + dx * plate * 0.45, cy + dy * plate],
-            [cx, cy + dy * plate],
+            [ox, oy],
+            [ox + dx * plate, oy],
+            [ox + dx * plate, oy + dy * plate * 0.45],
+            [ox + dx * plate * 0.45, oy + dy * plate],
+            [ox, oy + dy * plate],
           ])
-          .shape({ fill: '#d4a017', stroke: '#7a5200', lineWidth: Math.max(1, w * 0.004) }),
+          .shape({ fill: '#d4a017', stroke: '#7a5200', lineWidth: line }),
       );
     }
-    // Panel seams with rivets.
-    const seam = edge * 0.45;
+    // The chest plate: gold rim, dark band, then a warm glowing surface around the code.
     shapes.push(
-      outline(
-        { x: seam, y: seam, width: w - 2 * seam, height: h - 2 * seam },
-        Math.max(2, Math.round(w * 0.006)),
-        '#4d0c0c',
-      ),
+      organic(scene, octagon(scene, w * 0.075, w * 0.085), '#d4a017'),
+      organic(scene, octagon(scene, w * 0.06, w * 0.07), '#5c0f0f'),
     );
-    for (const [x, y] of clearPoints(
-      context,
-      perimeterPoints(context, seam, edge * 0.8),
-      edge * 0.1,
-    )) {
-      shapes.push(
-        circle(x, y, Math.max(2, edge * 0.07), {
-          fill: '#f0c75e',
-          stroke: '#7a5200',
-          lineWidth: 1,
-        }),
-      );
-    }
+    for (const [x, y] of pointsAround(grow(scene.tile, w * 0.067), w * 0.07))
+      shapes.push(circle(x, y, Math.max(1.5, w * 0.006), { fill: '#f0c75e' }));
+    shapes.push(
+      ...feather(scene, { pad: w * 0.022, spread: w * 0.03, radius: w * 0.02, colour: '#ffd89a' }),
+      around(scene, w * 0.018, scene.surface, w * 0.015),
+    );
+    shapes.push(...sign(scene, '#5c0f0f', '#d4a017'));
     return shapes;
   },
 };
+
+// A forked lightning bolt drawn in short pieces down the side of the scene.
+function lightning(scene: SceneContext, x: number, colour: string, width: number): Shape[] {
+  const shapes: Shape[] = [];
+  let px = x;
+  let py = 0;
+  for (let i = 0; i < 9; i++) {
+    const nx = px + (scene.random() - 0.5) * scene.size * 0.08;
+    const ny = py + scene.size * 0.08;
+    shapes.push(
+      ...brokenLine(px, py, nx, ny, 1, colour, width),
+      ...brokenLine(px, py, nx, ny, 1, colour, width * 3.5, 0.18),
+    );
+    px = nx;
+    py = ny;
+  }
+  return shapes;
+}
 
 const thunder: SubTheme = {
   id: 'thunder',
   name: 'Thunder',
   swatch: ['#0f1c3f', '#cfd8e3'],
   qr: { foreground: '#0f1c3f', background: '#f4f7fb', errorCorrection: 'M' },
-  insets: even(0.1),
-  captionBand: 0.12,
-  caption: { family: arcade, weight: 400, color: '#e3e9f2' },
+  tint: '#8fa0bb',
+  codeScale: 0.56,
+  caption: { family: arcade, weight: 400, color: '#0b1530' },
   suggestion: 'Bring the storm',
-  decorate(context) {
-    const edge = thinnestEdge(context);
-    const shapes: Shape[] = [ring(context, linear(0, 0, 0, context.height, '#1c2f66', '#0b1530'))];
-    for (const [x, y] of scatter(context, 26, edge * 0.06)) {
-      shapes.push(circle(x, y, Math.max(1, edge * 0.05), { fill: '#7f93b8', opacity: 0.7 }));
-    }
-    for (const [x, y] of scatter(context, 12, edge * 0.36)) {
-      shapes.push(bolt(x, y, edge * 0.7, '#dfe6ef', '#8fa0bb'));
-    }
+  paint(scene) {
+    const w = scene.size;
+    const shapes: Shape[] = [backdrop(scene, linear(0, 0, 0, w, '#0b1530', '#26344f', '#3a4660'))];
+    for (const [x, y] of scatter(scene, 9, w * 0.08))
+      shapes.push(...cloud(x, Math.min(y, w * 0.3), w * 0.2, '#1b2742', 0.85));
+    shapes.push(
+      ...lightning(scene, w * 0.1, '#e8f0ff', Math.max(1.5, w * 0.005)),
+      ...lightning(scene, w * 0.88, '#e8f0ff', Math.max(1.5, w * 0.005)),
+    );
+    for (const [x, y] of scatter(scene, 50, w * 0.01, w * 0.04))
+      shapes.push(
+        ...brokenLine(x, y, x - w * 0.012, y + w * 0.03, 1, '#9fb3d1', Math.max(1, w * 0.002), 0.5),
+      );
+    // The stone tablet, lit from above, with chipped edges.
+    shapes.push(
+      around(
+        scene,
+        w * 0.062,
+        linear(0, scene.tile.y, 0, scene.tile.y + scene.tile.height, '#d2d7de', '#9aa3ad'),
+        w * 0.02,
+      ),
+    );
+    for (const [x, y] of pointsAround(grow(scene.tile, w * 0.05), w * 0.09))
+      shapes.push(circle(x, y, Math.max(1.5, w * 0.008), { fill: '#7e8794', opacity: 0.6 }));
+    shapes.push(...feather(scene, { pad: w * 0.016, spread: w * 0.02, radius: w * 0.01 }));
+    for (const [x, y] of scatter(scene, 4, w * 0.02, 0))
+      shapes.push(bolt(x, y, w * 0.03, '#ffffff'));
+    shapes.push(...sign(scene, '#8e97a3', '#3b4452'));
     return shapes;
   },
 };
@@ -190,53 +231,84 @@ const thunder: SubTheme = {
 const gamma: SubTheme = {
   id: 'gamma',
   name: 'Gamma',
-  swatch: ['#2f7d32', '#0e3b12'],
+  swatch: ['#2f7d32', '#9dff8f'],
   qr: { foreground: '#10350f', background: '#f3fff0', errorCorrection: 'M' },
-  insets: even(0.1),
-  captionBand: 0.12,
-  caption: { family: arcade, weight: 400, color: '#ecffe0', stroke: '#0e3b12' },
+  tint: '#7fd46f',
+  codeScale: 0.56,
+  caption: { family: arcade, weight: 400, color: '#e8ffd9' },
   suggestion: 'Smash that scan',
-  decorate(context) {
-    const w = context.width;
-    const h = context.height;
-    const edge = thinnestEdge(context);
-    const shapes: Shape[] = [ring(context, linear(0, 0, w, h, '#3c9a40', '#1b5e20'))];
-    // Cracked ground spreading in from the edges.
-    const starts = perimeterPoints(context, 1, edge * 1.4);
-    for (const [x, y] of starts) {
-      const angle = Math.atan2(h / 2 - y, w / 2 - x) + (context.random() - 0.5);
-      const line = crack(context, x, y, angle, edge * 1.1, '#0e3b12', Math.max(1.5, w * 0.005));
+  paint(scene) {
+    const w = scene.size;
+    const [cx, cy] = centre(scene.tile);
+    const shapes: Shape[] = [
+      backdrop(scene, {
+        kind: 'radial',
+        cx,
+        cy,
+        r: w * 0.75,
+        stops: [
+          [0, '#3fa043'],
+          [1, '#0f3d12'],
+        ],
+      }),
+    ];
+    // Cracked ground: fissures running out from the energy plate.
+    const plate = grow(scene.tile, w * 0.07);
+    for (const [x, y] of pointsAround(plate, w * 0.07)) {
+      const angle = Math.atan2(y - cy, x - cx) + (scene.random() - 0.5) * 0.5;
+      const line = crack(
+        scene,
+        x + Math.cos(angle) * w * 0.02,
+        y + Math.sin(angle) * w * 0.02,
+        angle,
+        w * 0.18,
+        '#0a2a0c',
+        Math.max(1.5, w * 0.005),
+      );
       if (line) shapes.push(line);
     }
-    for (const [x, y] of scatter(context, 30, edge * 0.06)) {
+    for (const [x, y] of scatter(scene, 16, w * 0.025)) {
+      const r = w * (0.012 + scene.random() * 0.012);
       shapes.push(
-        circle(x, y, Math.max(1.5, edge * 0.05 + context.random() * edge * 0.04), {
-          fill: '#a5d6a7',
-          opacity: 0.8,
-        }),
+        path()
+          .polygon([
+            [x - r, y],
+            [x - r * 0.3, y - r],
+            [x + r, y - r * 0.4],
+            [x + r * 0.7, y + r * 0.6],
+            [x - r * 0.2, y + r],
+          ])
+          .shape({ fill: '#2a5a2c', stroke: '#0a2a0c', lineWidth: 1 }),
       );
     }
+    shapes.push(
+      ...feather(scene, {
+        pad: w * 0.07,
+        spread: w * 0.05,
+        radius: w * 0.05,
+        colour: '#9dff8f',
+        steps: 6,
+      }),
+      organic(scene, octagon(scene, w * 0.06, w * 0.04), '#1f5e22'),
+      ...compact([
+        crack(scene, plate.x, plate.y, Math.PI * 1.25, w * 0.08, '#9dff8f', Math.max(1, w * 0.003)),
+      ]),
+      around(scene, w * 0.03, scene.surface, w * 0.02),
+    );
+    shapes.push(...sign(scene, '#123d14', '#7cff6b'));
     return shapes;
   },
 };
 
 const SEGMENTS: Record<string, string> = {
   '0': 'abcdef',
-  '1': 'bc',
-  '2': 'abged',
-  '3': 'abgcd',
-  '4': 'fgbc',
-  '5': 'afgcd',
-  '6': 'afgedc',
   '7': 'abc',
-  '8': 'abcdefg',
-  '9': 'abcdfg',
 };
 
-// Seven-segment digits drawn as bars, so the "countdown" needs no font.
+// Seven-segment digits drawn as bars, so the countdown needs no font.
 function digit(value: string, x: number, y: number, height: number, colour: string): Shape[] {
   const width = height * 0.55;
-  const t = Math.max(1.5, height * 0.13);
+  const t = Math.max(1.2, height * 0.13);
   const half = height / 2;
   const bars: Record<string, Rect> = {
     a: { x: x + t, y, width: width - 2 * t, height: t },
@@ -245,43 +317,30 @@ function digit(value: string, x: number, y: number, height: number, colour: stri
     d: { x: x + t, y: y + height - t, width: width - 2 * t, height: t },
     e: { x, y: y + half + 0.5 * t, width: t, height: half - 1.5 * t },
     f: { x, y: y + t, width: t, height: half - 1.5 * t },
-    g: { x: x + t, y: y + half - t / 2, width: width - 2 * t, height: t },
   };
-  return Array.from(SEGMENTS[value] ?? '', (key) => {
-    const bar = bars[key];
-    return bar ? rect(bar.x, bar.y, bar.width, bar.height, { fill: colour, radius: t / 3 }) : null;
-  }).filter((shape): shape is Shape => shape !== null);
+  return Array.from(SEGMENTS[value] ?? '', (key) => bars[key]).flatMap((bar) =>
+    bar ? [rect(bar.x, bar.y, bar.width, bar.height, { fill: colour, radius: t / 3 })] : [],
+  );
 }
 
-function countdown(context: FrameContext, text: string, band: Rect): Shape[] {
-  const height = band.height * 0.5;
+function countdown(text: string, cx: number, cy: number, height: number, colour: string): Shape[] {
   const charWidth = height * 0.75;
-  const totalWidth = Array.from(text).reduce(
+  const total = Array.from(text).reduce(
     (sum, char) => sum + (char === ':' ? charWidth * 0.45 : charWidth),
     0,
   );
-  let x = context.width / 2 - totalWidth / 2;
-  const y = band.y + (band.height - height) / 2;
-  const glow: Shape = {
-    kind: 'rect',
-    x: x - height * 0.2,
-    y: y - height * 0.15,
-    width: totalWidth + height * 0.4,
-    height: height * 1.3,
-    radius: height * 0.2,
-    fill: '#1a0000',
-    opacity: 0.55,
-  };
-  const shapes: Shape[] = [glow];
+  let x = cx - total / 2;
+  const y = cy - height / 2;
+  const shapes: Shape[] = [];
   for (const char of text) {
     if (char === ':') {
       shapes.push(
-        circle(x + charWidth * 0.18, y + height * 0.3, height * 0.07, { fill: '#ff4d2e' }),
-        circle(x + charWidth * 0.18, y + height * 0.7, height * 0.07, { fill: '#ff4d2e' }),
+        circle(x + charWidth * 0.18, y + height * 0.3, height * 0.07, { fill: colour }),
+        circle(x + charWidth * 0.18, y + height * 0.7, height * 0.07, { fill: colour }),
       );
       x += charWidth * 0.45;
     } else {
-      shapes.push(...digit(char, x, y, height, '#ff4d2e'));
+      shapes.push(...digit(char, x, y, height, colour));
       x += charWidth;
     }
   }
@@ -293,47 +352,85 @@ const doomsday: SubTheme = {
   name: 'Doomsday',
   swatch: ['#5c0b0b', '#ff7b2e'],
   qr: { foreground: '#2b0505', background: '#fff4ec', errorCorrection: 'M' },
-  insets: { top: 0.14, right: 0.08, bottom: 0.12, left: 0.08 },
-  captionBand: 0.12,
+  tint: '#ff7b2e',
+  codeScale: 0.54,
   caption: { family: arcade, weight: 400, color: '#ffb347', stroke: '#2b0505' },
   suggestion: 'The clock is ticking',
-  decorate(context) {
-    const w = context.width;
-    const h = context.height;
-    const edge = thinnestEdge(context);
+  paint(scene) {
+    const w = scene.size;
+    const { tile } = scene;
     const shapes: Shape[] = [
-      ring(context, linear(0, 0, 0, h, '#1f0303', '#6b1010', '#b8361a', '#ff7b2e')),
+      backdrop(scene, linear(0, 0, 0, w, '#1f0303', '#6b1010', '#c23a1a', '#ff7b2e')),
     ];
-    // Embers drifting through the sky.
-    for (const [x, y] of scatter(context, 22, edge * 0.05)) {
-      shapes.push(circle(x, y, Math.max(1, edge * 0.04), { fill: '#ffcf7a', opacity: 0.75 }));
+    for (const [x, y] of scatter(scene, 26, w * 0.01, w * 0.02))
+      shapes.push(circle(x, y, Math.max(1, w * 0.004), { fill: '#ffcf7a', opacity: 0.7 }));
+    // A ruined skyline. Buildings below the monitor are kept short so they never reach it.
+    const below = w - (tile.y + tile.height) - w * 0.02;
+    let x = 0;
+    while (x < w) {
+      const width = w * (0.06 + scene.random() * 0.07);
+      const underCode = x + width > tile.x && x < tile.x + tile.width;
+      const height = underCode
+        ? below * (0.5 + scene.random() * 0.4)
+        : w * (0.25 + scene.random() * 0.35);
+      const top = w - height;
+      const jag = width * 0.3;
+      shapes.push(
+        path()
+          .polygon([
+            [x, w],
+            [x, top + jag],
+            [x + width * 0.3, top],
+            [x + width * 0.55, top + jag * 0.8],
+            [x + width * 0.8, top + jag * 0.2],
+            [x + width, top + jag],
+            [x + width, w],
+          ])
+          .shape({ fill: '#1a0a08' }),
+      );
+      for (let wy = top + jag + w * 0.02; wy < w - w * 0.02; wy += w * 0.035) {
+        for (let wx = x + width * 0.2; wx < x + width * 0.8; wx += width * 0.3) {
+          if (scene.random() < 0.3)
+            shapes.push(rect(wx, wy, w * 0.008, w * 0.012, { fill: '#ff9a3c', opacity: 0.8 }));
+        }
+      }
+      x += width + w * 0.005;
     }
-    // Cracked earth along the bottom, with glowing fissures.
-    const ground = context.edges.bottom;
-    const groundTop = ground.y + ground.height * 0.45;
-    const rim = path().moveTo(0, h);
-    const steps = 10;
-    for (let i = 0; i <= steps; i++)
-      rim.lineTo((w * i) / steps, groundTop + (context.random() - 0.5) * ground.height * 0.15);
-    rim.lineTo(w, h).close();
-    shapes.push(rim.shape({ fill: '#1a0d08' }));
-    for (let i = 0; i < 7; i++) {
-      const x = (w * (i + 0.5)) / 7;
-      const fissure = compact([
-        crack(
-          context,
-          x,
-          h - 1,
-          -Math.PI / 2 + (context.random() - 0.5) * 0.8,
-          ground.height * 0.45,
-          '#ff6a00',
-          Math.max(1.5, w * 0.004),
-        ),
-      ]);
-      shapes.push(...fissure);
-    }
-    const top = context.edges.top;
-    if (top.height > edge * 0.8) shapes.push(...countdown(context, '00:00:07', top));
+    // The monitor: a dark bezel, a deep bottom edge for the countdown, and a glowing screen.
+    // Kept shallow enough that a bottom caption's ticker never covers the digits.
+    const bezel = { top: w * 0.035, left: w * 0.035, right: w * 0.035, bottom: w * 0.05 };
+    shapes.push(
+      rect(
+        tile.x + tile.width / 2 - w * 0.03,
+        tile.y + tile.height + bezel.bottom,
+        w * 0.06,
+        w * 0.03,
+        { fill: '#2a2a2e' },
+      ),
+    );
+    shapes.push(
+      ...feather(scene, {
+        pad: w * 0.06,
+        spread: w * 0.06,
+        radius: w * 0.04,
+        colour: '#ff9a3c',
+        steps: 6,
+      }),
+    );
+    shapes.push(
+      around(scene, bezel, '#26262b', w * 0.02),
+      around(scene, w * 0.014, scene.surface, w * 0.01),
+    );
+    shapes.push(
+      ...countdown(
+        '00:00:07',
+        tile.x + tile.width / 2,
+        tile.y + tile.height + w * 0.014 + (bezel.bottom - w * 0.014) / 2,
+        w * 0.024,
+        '#ff4d2e',
+      ),
+    );
+    shapes.push(...ticker(scene, '#1a0505', '#ff4d2e'));
     return shapes;
   },
 };

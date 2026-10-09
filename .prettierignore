@@ -7,3 +7,4 @@ package-lock.json
 CLAUDE.md
 .claude
 design-preview
+.vitest

@@ -1,58 +1,110 @@
-import type { Rect } from '../plan';
-import { circle, linear, path, rect, type Shape } from '../shapes';
-import { clearPoints, isClear, outline, perimeterPoints, ring, scatter, thinnestEdge } from './kit';
-import { CAPTION_FAMILIES, type FrameContext, type SubTheme, type Theme } from './types';
+import { circle, intersects, linear, path, rect, type Shape } from '../shapes';
+import {
+  around,
+  backdrop,
+  blobPath,
+  brokenLine,
+  centre,
+  grow,
+  holdingCaption,
+  organic,
+  pointsAround,
+  scatter,
+  sign,
+  type Sides,
+} from './kit';
+import { CAPTION_FAMILIES, type SubTheme, type Theme } from './types';
 
-const even = (value: number) => ({ top: value, right: value, bottom: value, left: value });
 const arcade = CAPTION_FAMILIES.arcade;
 
-// The four frame bands as rectangles that never touch the code or the caption strip.
-function frameBands(context: FrameContext): Rect[] {
-  return [context.edges.top, context.edges.bottom, context.edges.left, context.edges.right].filter(
-    (band) => band.width > 0 && band.height > 0,
-  );
+function widest(a: Sides, b: Partial<Sides>): Sides {
+  return {
+    top: Math.max(a.top, b.top ?? 0),
+    right: Math.max(a.right, b.right ?? 0),
+    bottom: Math.max(a.bottom, b.bottom ?? 0),
+    left: Math.max(a.left, b.left ?? 0),
+  };
 }
 
 function rivet(x: number, y: number, r: number): Shape[] {
   return [
-    circle(x, y, r, { fill: '#5a3a2a', stroke: '#2d1a10', lineWidth: Math.max(1, r * 0.25) }),
-    circle(x - r * 0.3, y - r * 0.3, r * 0.35, { fill: '#c9a48a', opacity: 0.8 }),
+    circle(x, y, r, { fill: '#6b7176', stroke: '#2d2f31', lineWidth: Math.max(1, r * 0.25) }),
+    circle(x - r * 0.3, y - r * 0.3, r * 0.35, { fill: '#e2e6e9', opacity: 0.8 }),
   ];
 }
 
 const rust: SubTheme = {
   id: 'rust',
   name: 'Rusted metal',
-  swatch: ['#8a3b12', '#c9a48a'],
+  swatch: ['#8a3b12', '#a7aeb3'],
   qr: { foreground: '#2a1205', background: '#fff3e6', errorCorrection: 'M' },
-  insets: even(0.1),
-  captionBand: 0.12,
-  caption: { family: arcade, weight: 400, color: '#ffe0c2', stroke: '#2a1205' },
+  tint: '#c0622b',
+  codeScale: 0.56,
+  caption: { family: arcade, weight: 400, color: '#2a1205' },
   suggestion: 'Built to last',
-  decorate(context) {
-    const edge = thinnestEdge(context);
-    const shapes: Shape[] = [
-      ring(context, linear(0, 0, context.width, context.height, '#9a4a1c', '#6b2f12', '#8a3b12')),
-    ];
-    // Procedural rust: seeded specks of oxide, pitting and bare metal.
+  paint(scene) {
+    const w = scene.size;
+    const shapes: Shape[] = [backdrop(scene, linear(0, 0, w, w, '#9a4a1c', '#6b2f12', '#8a3b12'))];
+    // Procedural rust: seeded specks of oxide, pitting and bare metal, plus drips.
     const palette = ['#c0622b', '#4a1e0a', '#d98b4a', '#3a2418', '#7d8a8f'];
-    const speck = 1 + edge * 0.06;
-    for (const [x, y] of scatter(context, 700, speck * 1.5, 4000)) {
-      const size = 1 + context.random() * (speck - 1);
+    const speck = 1 + w * 0.006;
+    for (const [x, y] of scatter(scene, 900, speck, 0)) {
+      const size = 1 + scene.random() * (speck - 1);
       shapes.push(
-        rect(x, y, size, size * (0.5 + context.random()), {
-          fill: palette[Math.floor(context.random() * palette.length)] ?? '#c0622b',
-          opacity: 0.25 + context.random() * 0.5,
+        rect(x, y, size, size * (0.5 + scene.random()), {
+          fill: palette[Math.floor(scene.random() * palette.length)] ?? '#c0622b',
+          opacity: 0.25 + scene.random() * 0.5,
         }),
       );
     }
-    for (const [x, y] of clearPoints(
-      context,
-      perimeterPoints(context, edge * 0.5, edge * 1.6),
-      edge * 0.14,
-    )) {
-      shapes.push(...rivet(x, y, edge * 0.11));
+    for (let i = 0; i < 14; i++) {
+      const x = scene.random() * w;
+      const top = scene.random() * w * 0.6;
+      shapes.push(
+        ...brokenLine(
+          x,
+          top,
+          x + (scene.random() - 0.5) * w * 0.01,
+          top + w * (0.1 + scene.random() * 0.25),
+          4,
+          '#4a1e0a',
+          Math.max(1.5, w * 0.006),
+          0.35,
+        ),
+      );
     }
+    // The riveted steel plate, its rivets kept off the caption.
+    const reach = holdingCaption(scene, w * 0.065);
+    shapes.push(
+      around(
+        scene,
+        { ...reach, right: reach.right + w * 0.01, bottom: reach.bottom + w * 0.012 },
+        'rgba(20, 8, 2, 0.45)',
+        w * 0.012,
+      ),
+    );
+    shapes.push(
+      around(
+        scene,
+        reach,
+        linear(0, scene.tile.y, 0, scene.tile.y + scene.tile.height, '#b9c0c5', '#8d969c'),
+        w * 0.012,
+      ),
+    );
+    const plate = grow(scene.tile, reach);
+    for (const [x, y] of pointsAround(grow(plate, -w * 0.022), w * 0.075)) {
+      const r = w * 0.009;
+      if (
+        scene.caption &&
+        intersects(
+          { x: x - r, y: y - r, width: 2 * r, height: 2 * r },
+          grow(scene.caption, w * 0.01),
+        )
+      )
+        continue;
+      shapes.push(...rivet(x, y, r));
+    }
+    shapes.push(around(scene, w * 0.02, scene.surface, w * 0.008));
     return shapes;
   },
 };
@@ -62,73 +114,83 @@ const neon: SubTheme = {
   name: 'Neon arcade',
   swatch: ['#14002b', '#ff2fd6'],
   qr: { foreground: '#14002b', background: '#fdf7ff', errorCorrection: 'M' },
-  insets: { top: 0.09, right: 0.09, bottom: 0.2, left: 0.09 },
-  captionBand: 0.12,
+  tint: '#ff2fd6',
+  codeScale: 0.54,
   caption: { family: arcade, weight: 400, color: '#3df5ff' },
   suggestion: 'Insert coin',
-  decorate(context) {
-    const w = context.width;
-    const edge = thinnestEdge(context);
-    const shapes: Shape[] = [ring(context, '#14002b')];
-    for (const [x, y] of scatter(context, 30, 2))
-      shapes.push(circle(x, y, Math.max(1, edge * 0.03), { fill: '#ffffff', opacity: 0.6 }));
-    // A striped sunset over a perspective grid, in the bottom band.
-    const ground = context.edges.bottom;
-    const horizon = ground.y + ground.height * 0.55;
-    const sunR = ground.height * 0.38;
+  paint(scene) {
+    const w = scene.size;
+    const { tile } = scene;
+    const [cx] = centre(tile);
+    const half = tile.width / 2;
+    const shapes: Shape[] = [backdrop(scene, linear(0, 0, 0, w, '#0b0016', '#2a0050', '#14002b'))];
+    for (const [x, y] of scatter(scene, 40, w * 0.005, w * 0.03))
+      shapes.push(circle(x, y, Math.max(0.8, w * 0.0025), { fill: '#ffffff', opacity: 0.7 }));
+    // A huge striped sun setting behind the arcade screen.
+    const sunReach = half * 1.75;
     shapes.push(
-      circle(w / 2, horizon, sunR, {
-        fill: linear(0, horizon - sunR, 0, horizon, '#ffd23f', '#ff2fd6'),
-      }),
+      organic(
+        scene,
+        blobPath(scene, () => sunReach, 96),
+        linear(
+          0,
+          tile.y - sunReach,
+          0,
+          tile.y + tile.height + sunReach,
+          '#ffd23f',
+          '#ff6a3d',
+          '#ff2fd6',
+        ),
+      ),
     );
-    for (let i = 1; i <= 3; i++)
+    const horizon = tile.y + tile.height + w * 0.03;
+    for (let i = 1; i <= 5; i++) {
+      const y = tile.y + tile.height * (0.45 + i * 0.1);
+      const thickness = Math.max(1, w * 0.004 * i);
       shapes.push(
-        rect(w / 2 - sunR, horizon - sunR * (i * 0.22), 2 * sunR, Math.max(1, sunR * 0.06 * i), {
-          fill: '#14002b',
-        }),
-      );
-    shapes.push(rect(0, horizon, w, ground.y + ground.height - horizon, { fill: '#25004d' }));
-    const line = Math.max(1, w * 0.003);
-    for (let i = -8; i <= 8; i++) {
-      shapes.push(
-        path()
-          .moveTo(w / 2 + i * w * 0.02, horizon)
-          .lineTo(w / 2 + i * w * 0.12, ground.y + ground.height)
-          .shape({ stroke: '#ff2fd6', lineWidth: line, opacity: 0.85 }),
+        rect(0, y, tile.x - w * 0.06, thickness, { fill: '#14002b' }),
+        rect(tile.x + tile.width + w * 0.06, y, w, thickness, { fill: '#14002b' }),
       );
     }
-    for (let k = 1; k <= 4; k++) {
-      const y = horizon + (ground.y + ground.height - horizon) * (k / 4) ** 1.6;
+    // The perspective grid floor.
+    shapes.push(rect(0, horizon, w, w - horizon, { fill: '#25004d' }));
+    const line = Math.max(1, w * 0.003);
+    for (let i = -9; i <= 9; i++)
+      shapes.push(
+        ...brokenLine(cx + i * w * 0.02, horizon, cx + i * w * 0.13, w, 1, '#ff2fd6', line, 0.85),
+      );
+    for (let k = 0; k <= 5; k++) {
+      const y = horizon + (w - horizon) * (k / 5) ** 1.7;
       shapes.push(rect(0, y, w, line, { fill: '#ff2fd6', opacity: 0.85 }));
     }
-    // Neon tubes up the sides.
-    for (const band of [context.edges.left, context.edges.right]) {
-      const x = band.x + band.width / 2;
-      shapes.push(
-        rect(x - line * 1.5, band.y + band.height * 0.1, line * 3, band.height * 0.8, {
-          fill: '#3df5ff',
-          radius: line,
-        }),
-      );
-    }
+    // The arcade screen: neon-edged bezel around a bright screen.
+    shapes.push(
+      around(scene, w * 0.062, '#ff2fd6', w * 0.03, 0.35),
+      around(scene, w * 0.05, '#1a0033', w * 0.026),
+      around(scene, w * 0.042, '#3df5ff', w * 0.022),
+      around(scene, w * 0.036, '#1a0033', w * 0.02),
+      around(scene, w * 0.016, scene.surface, w * 0.012),
+    );
+    shapes.push(...sign(scene, '#14002b', '#ff2fd6'));
     return shapes;
   },
 };
 
 function reel(cx: number, cy: number, r: number): Shape[] {
   const shapes: Shape[] = [
-    circle(cx, cy, r, { fill: '#f4e9d0' }),
-    circle(cx, cy, r * 0.42, { fill: '#2b2b2b' }),
+    circle(cx, cy, r, { fill: '#5c3b1e' }),
+    circle(cx, cy, r * 0.55, { fill: '#f4e9d0' }),
+    circle(cx, cy, r * 0.25, { fill: '#2b2b2b' }),
   ];
   for (let i = 0; i < 6; i++) {
     const angle = (i * Math.PI) / 3;
     shapes.push(
       rect(
-        cx + Math.cos(angle) * r * 0.28 - r * 0.05,
-        cy + Math.sin(angle) * r * 0.28 - r * 0.05,
+        cx + Math.cos(angle) * r * 0.4 - r * 0.05,
+        cy + Math.sin(angle) * r * 0.4 - r * 0.05,
         r * 0.1,
         r * 0.1,
-        { fill: '#f4e9d0' },
+        { fill: '#2b2b2b' },
       ),
     );
   }
@@ -139,73 +201,94 @@ const cassette: SubTheme = {
   id: 'cassette',
   name: 'Cassette label',
   swatch: ['#2b2b2b', '#ff8a3d'],
-  qr: { foreground: '#1e1e1e', background: '#fffaf0', errorCorrection: 'M' },
-  insets: { top: 0.12, right: 0.08, bottom: 0.2, left: 0.08 },
-  captionBand: 0.12,
-  caption: { family: arcade, weight: 400, color: '#2b2b2b', band: '#f4e9d0' },
+  qr: { foreground: '#1e1e1e', background: '#fbf4e2', errorCorrection: 'M' },
+  tint: '#ff8a3d',
+  codeScale: 0.5,
+  caption: { family: arcade, weight: 400, color: '#2b2b2b' },
   suggestion: 'Side A',
-  decorate(context) {
-    const w = context.width;
-    const h = context.height;
-    const edge = thinnestEdge(context);
-    const shapes: Shape[] = [
-      ring(context, '#d9d2c3'),
-      ring(context, '#2b2b2b', { x: 0, y: 0, width: w, height: h }, w * 0.05),
-    ];
-    // Label stripes across the top band.
-    const top = context.edges.top;
-    const stripe = top.height * 0.18;
-    shapes.push(
-      rect(edge * 0.4, top.y + top.height * 0.25, w - edge * 0.8, stripe, { fill: '#ff8a3d' }),
+  paint(scene) {
+    const w = scene.size;
+    const { tile } = scene;
+    const [cx, cy] = centre(tile);
+    const shapes: Shape[] = [backdrop(scene, '#7fd1c7')];
+    for (let i = -6; i < 14; i++)
+      shapes.push(...brokenLine(i * w * 0.1, 0, i * w * 0.1 + w, w, 12, '#9fe0d7', w * 0.02, 0.6));
+    // The cassette body fills most of the scene, always a little larger than its label.
+    const label = holdingCaption(scene, w * 0.05);
+    const body = widest(
+      { top: w * 0.18, bottom: w * 0.2, left: w * 0.21, right: w * 0.21 },
+      { top: label.top + w * 0.03, bottom: label.bottom + w * 0.03 },
     );
     shapes.push(
-      rect(edge * 0.4, top.y + top.height * 0.25 + stripe, w - edge * 0.8, stripe, {
-        fill: '#1fa39a',
-      }),
-    );
-    // Tape window with two reels in the bottom band.
-    const bottom = context.edges.bottom;
-    const windowBox = {
-      x: w * 0.22,
-      y: bottom.y + bottom.height * 0.18,
-      width: w * 0.56,
-      height: bottom.height * 0.62,
-    };
-    shapes.push(
-      rect(windowBox.x, windowBox.y, windowBox.width, windowBox.height, {
-        fill: '#4a4a4a',
-        radius: windowBox.height * 0.5,
-      }),
-    );
-    const r = windowBox.height * 0.4;
-    for (const cx of [
-      windowBox.x + windowBox.height * 0.5,
-      windowBox.x + windowBox.width - windowBox.height * 0.5,
-    ])
-      shapes.push(...reel(cx, windowBox.y + windowBox.height / 2, r));
-    shapes.push(
-      rect(
-        windowBox.x + windowBox.height,
-        windowBox.y + windowBox.height * 0.4,
-        windowBox.width - 2 * windowBox.height,
-        windowBox.height * 0.2,
-        { fill: '#5c3b1e' },
+      around(
+        scene,
+        {
+          top: body.top - w * 0.01,
+          bottom: body.bottom + w * 0.02,
+          left: body.left - w * 0.01,
+          right: body.right + w * 0.02,
+        },
+        'rgba(0, 0, 0, 0.25)',
+        w * 0.05,
       ),
     );
-    // Corner screws.
-    const screw = Math.max(2, edge * 0.1);
+    shapes.push(around(scene, body, '#2b2b2b', w * 0.05));
+    const outer = grow(tile, body);
     for (const [x, y] of [
-      [edge * 0.35, edge * 0.35],
-      [w - edge * 0.35, edge * 0.35],
-      [edge * 0.35, h - edge * 0.35],
-      [w - edge * 0.35, h - edge * 0.35],
+      [outer.x + w * 0.03, outer.y + w * 0.03],
+      [outer.x + outer.width - w * 0.03, outer.y + w * 0.03],
+      [outer.x + w * 0.03, outer.y + outer.height - w * 0.03],
+      [outer.x + outer.width - w * 0.03, outer.y + outer.height - w * 0.03],
     ] as [number, number][]) {
-      if (isClear(context, x, y, screw))
-        shapes.push(
-          circle(x, y, screw, { fill: '#9a9a9a' }),
-          rect(x - screw * 0.7, y - screw * 0.12, screw * 1.4, screw * 0.24, { fill: '#555555' }),
-        );
+      shapes.push(
+        circle(x, y, w * 0.012, { fill: '#9a9a9a' }),
+        rect(x - w * 0.008, y - w * 0.002, w * 0.016, w * 0.004, { fill: '#555555' }),
+      );
     }
+    // Tape windows with reels either side of the label.
+    for (const side of [-1, 1]) {
+      const rx = side < 0 ? tile.x - w * 0.115 : tile.x + tile.width + w * 0.115;
+      shapes.push(
+        rect(rx - w * 0.075, cy - w * 0.085, w * 0.15, w * 0.17, {
+          fill: '#4a4a4a',
+          radius: w * 0.03,
+        }),
+        ...reel(rx, cy, w * 0.06),
+      );
+    }
+    // The label, striped across the top, holding the code and the caption.
+    shapes.push(around(scene, label, scene.surface, w * 0.015));
+    const stripeTop = tile.y - label.top + w * 0.008;
+    if (scene.captionPosition !== 'top' || !scene.caption) {
+      shapes.push(
+        rect(
+          tile.x - label.left + w * 0.01,
+          stripeTop,
+          tile.width + label.left + label.right - w * 0.02,
+          w * 0.012,
+          { fill: '#ff8a3d' },
+        ),
+      );
+      shapes.push(
+        rect(
+          tile.x - label.left + w * 0.01,
+          stripeTop + w * 0.016,
+          tile.width + label.left + label.right - w * 0.02,
+          w * 0.012,
+          { fill: '#1fa39a' },
+        ),
+      );
+    }
+    shapes.push(
+      path()
+        .polygon([
+          [cx - w * 0.1, tile.y + tile.height + body.bottom],
+          [cx - w * 0.07, tile.y + tile.height + body.bottom - w * 0.03],
+          [cx + w * 0.07, tile.y + tile.height + body.bottom - w * 0.03],
+          [cx + w * 0.1, tile.y + tile.height + body.bottom],
+        ])
+        .shape({ fill: '#3d3d3d' }),
+    );
     return shapes;
   },
 };
@@ -213,40 +296,64 @@ const cassette: SubTheme = {
 const vhs: SubTheme = {
   id: 'vhs',
   name: 'VHS glitch',
-  swatch: ['#101018', '#ff3b5c'],
+  swatch: ['#1d1b2a', '#ff3b5c'],
   qr: { foreground: '#101018', background: '#f5f5ff', errorCorrection: 'M' },
-  insets: even(0.1),
-  captionBand: 0.12,
-  caption: { family: arcade, weight: 400, color: '#e8e8ff', stroke: '#2a2aff' },
+  tint: '#7d7dff',
+  codeScale: 0.5,
+  caption: { family: arcade, weight: 400, color: '#f3e3c8' },
   suggestion: 'Tracking adjusted',
-  decorate(context) {
-    const shapes: Shape[] = [ring(context, '#101018')];
-    const bands = frameBands(context);
-    // Scan lines, band by band so they never cross the code.
-    for (const band of bands) {
-      for (let y = band.y + 1; y < band.y + band.height - 1; y += 4)
-        shapes.push(rect(band.x, y, band.width, 1, { fill: '#ffffff', opacity: 0.07 }));
-    }
-    // Seeded RGB tearing: offset red, green and cyan slivers.
+  paint(scene) {
+    const w = scene.size;
+    const { tile } = scene;
+    const shapes: Shape[] = [backdrop(scene, linear(0, 0, 0, w, '#24213a', '#14121f'))];
+    // Scan lines and seeded RGB tearing on the wall behind the TV, never on the code.
+    for (let y = 1; y < w; y += 4) shapes.push(...brokenLine(0, y, w, y, 8, '#ffffff', 1, 0.06));
     const colours = ['#ff3b5c', '#3dffb0', '#3dd6ff'];
-    for (let i = 0; i < 40; i++) {
-      const band = bands[Math.floor(context.random() * bands.length)];
-      if (!band) continue;
-      const height = 1 + context.random() * band.height * 0.08;
-      const y = band.y + context.random() * (band.height - height);
-      const width = band.width * (0.15 + context.random() * 0.5);
-      const x = band.x + context.random() * (band.width - width);
+    for (let i = 0; i < 46; i++) {
+      const height = 1 + scene.random() * w * 0.014;
+      const width = w * (0.05 + scene.random() * 0.3);
+      const x = scene.random() * w;
+      const y = scene.random() * w;
       const colour = colours[i % colours.length] ?? '#ff3b5c';
-      shapes.push(rect(x, y, width, height, { fill: colour, opacity: 0.55 }));
-      const shift = Math.min(band.x + band.width - x - width, 2 + context.random() * 6);
-      if (shift > 0)
-        shapes.push(
-          rect(x + shift, y, width, height, {
-            fill: colours[(i + 1) % colours.length] ?? '#3dd6ff',
-            opacity: 0.35,
-          }),
-        );
+      shapes.push(
+        rect(x, y, width, height, { fill: colour, opacity: 0.5 }),
+        rect(x + 3 + scene.random() * 6, y, width, height, {
+          fill: colours[(i + 1) % colours.length] ?? '#3dd6ff',
+          opacity: 0.3,
+        }),
+      );
     }
+    // The TV: antenna, wooden cabinet, knobs, and the screen around the code.
+    const cabinet = widest(holdingCaption(scene, w * 0.075), {
+      right: w * 0.16,
+      bottom: w * 0.075,
+    });
+    const top = tile.y - cabinet.top;
+    const line = Math.max(1.5, w * 0.005);
+    shapes.push(
+      ...brokenLine(w / 2, top, w * 0.3, top - w * 0.17, 3, '#c7c7c7', line),
+      ...brokenLine(w / 2, top, w * 0.72, top - w * 0.15, 3, '#c7c7c7', line),
+    );
+    shapes.push(around(scene, cabinet, linear(0, top, 0, top + w, '#6b5240', '#4a3828'), w * 0.04));
+    const knobX = tile.x + tile.width + cabinet.right * 0.55;
+    for (const [i, y] of [tile.y + tile.height * 0.25, tile.y + tile.height * 0.5].entries())
+      shapes.push(
+        circle(knobX, y, w * (0.026 - i * 0.006), {
+          fill: '#d8c3a5',
+          stroke: '#2b2118',
+          lineWidth: line,
+        }),
+      );
+    for (let k = 0; k < 4; k++)
+      shapes.push(
+        rect(knobX - w * 0.03, tile.y + tile.height * 0.68 + k * w * 0.018, w * 0.06, w * 0.008, {
+          fill: '#2b2118',
+        }),
+      );
+    shapes.push(
+      around(scene, w * 0.03, '#141414', w * 0.04),
+      around(scene, w * 0.014, scene.surface, w * 0.03),
+    );
     return shapes;
   },
 };
@@ -255,7 +362,6 @@ function speaker(cx: number, cy: number, r: number): Shape[] {
   const shapes: Shape[] = [
     circle(cx, cy, r, { fill: '#1a1a1a', stroke: '#c7c7c7', lineWidth: Math.max(1.5, r * 0.08) }),
   ];
-  // Grille: a grid of dots inside the cone.
   const step = Math.max(3, r * 0.18);
   for (let y = cy - r; y <= cy + r; y += step) {
     for (let x = cx - r; x <= cx + r; x += step) {
@@ -272,57 +378,74 @@ const boombox: SubTheme = {
   name: 'Boombox',
   swatch: ['#2b2b2b', '#ffcf33'],
   qr: { foreground: '#1a1a1a', background: '#f7f7f7', errorCorrection: 'M' },
-  insets: { top: 0.14, right: 0.2, bottom: 0.08, left: 0.2 },
-  captionBand: 0.12,
+  tint: '#ffcf33',
+  codeScale: 0.44,
   caption: { family: arcade, weight: 400, color: '#ffcf33' },
   suggestion: 'Turn it up',
-  decorate(context) {
-    const w = context.width;
-    const shapes: Shape[] = [
-      ring(context, '#d6d6d6'),
-      ring(
-        context,
-        linear(0, 0, 0, context.height, '#3a3a3a', '#232323'),
-        { x: 0, y: 0, width: w, height: context.height },
-        w * 0.04,
-      ),
-    ];
-    for (const band of [context.edges.left, context.edges.right]) {
-      const r = Math.min(band.width * 0.4, band.height * 0.22);
-      const cx = band.x + band.width / 2;
-      shapes.push(
-        ...speaker(cx, band.y + band.height * 0.3, r),
-        ...speaker(cx, band.y + band.height * 0.72, r * 0.75),
-      );
+  paint(scene) {
+    const w = scene.size;
+    const { tile } = scene;
+    const [, cy] = centre(tile);
+    const shapes: Shape[] = [backdrop(scene, '#b5523b')];
+    // A brick wall behind.
+    const brickH = w / 16;
+    for (let row = 0; row < 16; row++) {
+      const offset = row % 2 === 0 ? 0 : w / 16;
+      for (let x = -offset; x < w; x += w / 8)
+        shapes.push(
+          rect(x + 1, row * brickH + 1, w / 8 - 2, brickH - 2, {
+            fill: row % 3 === 0 ? '#c4624a' : '#a8492f',
+            radius: 1,
+          }),
+        );
     }
+    const body = widest(holdingCaption(scene, w * 0.06), {
+      left: w * 0.26,
+      right: w * 0.26,
+      top: w * 0.1,
+      bottom: w * 0.08,
+    });
+    const outer = grow(tile, body);
     // Carry handle and buttons along the top.
-    const top = context.edges.top;
-    const handleY = top.y + top.height * 0.32;
+    const line = Math.max(3, w * 0.014);
     shapes.push(
       path()
-        .moveTo(w * 0.3, top.y + top.height * 0.85)
-        .lineTo(w * 0.3, handleY + top.height * 0.1)
-        .quadTo(w * 0.3, handleY, w * 0.35, handleY)
-        .lineTo(w * 0.65, handleY)
-        .quadTo(w * 0.7, handleY, w * 0.7, handleY + top.height * 0.1)
-        .lineTo(w * 0.7, top.y + top.height * 0.85)
-        .shape({ stroke: '#c7c7c7', lineWidth: Math.max(2, top.height * 0.1), lineCap: 'round' }),
+        .moveTo(w * 0.32, outer.y)
+        .lineTo(w * 0.32, outer.y - w * 0.06)
+        .quadTo(w * 0.32, outer.y - w * 0.09, w * 0.36, outer.y - w * 0.09)
+        .lineTo(w * 0.64, outer.y - w * 0.09)
+        .quadTo(w * 0.68, outer.y - w * 0.09, w * 0.68, outer.y - w * 0.06)
+        .lineTo(w * 0.68, outer.y)
+        .shape({ stroke: '#c7c7c7', lineWidth: line, lineCap: 'round' }),
     );
-    for (let i = 0; i < 4; i++) {
+    shapes.push(
+      around(
+        scene,
+        { ...body, right: body.right + w * 0.012, bottom: body.bottom + w * 0.015 },
+        'rgba(0, 0, 0, 0.35)',
+        w * 0.04,
+      ),
+      around(
+        scene,
+        body,
+        linear(0, outer.y, 0, outer.y + outer.height, '#3a3a3a', '#202020'),
+        w * 0.04,
+      ),
+    );
+    for (let i = 0; i < 4; i++)
       shapes.push(
-        rect(w * 0.38 + i * w * 0.065, top.y + top.height * 0.55, w * 0.05, top.height * 0.2, {
+        rect(tile.x + i * w * 0.07, outer.y + w * 0.025, w * 0.05, w * 0.025, {
           fill: i === 0 ? '#ff3b3b' : '#9a9a9a',
           radius: 2,
         }),
       );
+    for (const side of [-1, 1]) {
+      const sx = side < 0 ? tile.x - w * 0.14 : tile.x + tile.width + w * 0.14;
+      shapes.push(...speaker(sx, cy, w * 0.105));
     }
     shapes.push(
-      outline(
-        { x: 0, y: 0, width: w, height: context.height },
-        Math.max(2, Math.round(w * 0.006)),
-        '#c7c7c7',
-        w * 0.04,
-      ),
+      around(scene, w * 0.03, '#c7c7c7', w * 0.02),
+      around(scene, w * 0.022, scene.surface, w * 0.015),
     );
     return shapes;
   },

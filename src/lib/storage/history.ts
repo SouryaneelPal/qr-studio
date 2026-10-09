@@ -1,6 +1,7 @@
 import { QR_TYPES, type QrInputs, type QrType, type WifiSecurity } from '../payload/types';
 import { CAPTION_MAX_LENGTH, graphemes, type CaptionSettings } from '../render/caption';
 import { isHexColor } from '../render/color';
+import { MAX_BLEND } from '../render/plan';
 import { DEFAULT_DESIGN, type QrDesign } from '../render/renderQr';
 import { ERROR_CORRECTION_LEVELS, MARGIN_RANGE, SIZE_RANGE, type QrStyle } from '../render/style';
 import { isThemeChoice } from '../render/themes';
@@ -31,7 +32,11 @@ export function createEntry<K extends QrType>(
 ): HistoryEntry {
   const now = options.now ?? Date.now();
   const source = options.design ?? DEFAULT_DESIGN;
-  const design = { theme: { ...source.theme }, caption: { ...source.caption } };
+  const design = {
+    theme: { ...source.theme },
+    caption: { ...source.caption },
+    blend: source.blend,
+  };
   const id = options.id ?? `${now.toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
   if (type === 'wifi') {
@@ -142,9 +147,14 @@ function parseDesign(value: unknown): QrDesign | null {
   if (value === undefined) return DEFAULT_DESIGN;
   if (!isRecord(value) || !isThemeChoice(value.theme)) return null;
   const caption = parseCaption(value.caption);
-  return caption
-    ? { theme: { themeId: value.theme.themeId, subThemeId: value.theme.subThemeId }, caption }
-    : null;
+  // Entries saved before the Blend slider existed have no blend: they used none.
+  const blend = value.blend === undefined ? 0 : value.blend;
+  if (!caption || typeof blend !== 'number' || !(blend >= 0 && blend <= MAX_BLEND)) return null;
+  return {
+    theme: { themeId: value.theme.themeId, subThemeId: value.theme.subThemeId },
+    caption,
+    blend,
+  };
 }
 
 export function parseEntry(value: unknown): HistoryEntry | null {

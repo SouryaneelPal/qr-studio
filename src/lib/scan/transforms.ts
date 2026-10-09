@@ -9,6 +9,12 @@ function blank(width: number, height: number): Pixels {
   return { data: new Uint8ClampedArray(width * height * 4), width, height };
 }
 
+// Copies field by field: a canvas ImageData keeps width and height as prototype getters,
+// so spreading one would silently lose them.
+function copyPixels(src: Pixels): Pixels {
+  return { data: src.data.slice(), width: src.width, height: src.height };
+}
+
 function clampIndex(value: number, max: number): number {
   return value < 0 ? 0 : value > max ? max : value;
 }
@@ -42,7 +48,7 @@ function blurPass(src: Pixels, radius: number, horizontal: boolean): Pixels {
 
 export function boxBlur(src: Pixels, radius: number): Pixels {
   const r = Math.max(0, Math.round(radius));
-  if (r === 0) return { ...src, data: src.data.slice() };
+  if (r === 0) return copyPixels(src);
   return blurPass(blurPass(src, r, true), r, false);
 }
 
@@ -96,7 +102,7 @@ export function crop(src: Pixels, x: number, y: number, width: number, height: n
 // Averages each factor×factor block into one pixel; edge blocks average what they contain.
 export function downscaleByFactor(src: Pixels, factor: number): Pixels {
   const k = Math.max(1, Math.floor(factor));
-  if (k === 1) return { ...src, data: src.data.slice() };
+  if (k === 1) return copyPixels(src);
   const width = Math.ceil(src.width / k);
   const height = Math.ceil(src.height / k);
   const out = blank(width, height);
@@ -138,7 +144,7 @@ function upscaleBilinear(src: Pixels, width: number, height: number): Pixels {
 
 // Mimics a small print or a distant camera: detail finer than the reduced resolution is lost.
 export function downscaleAndRestore(src: Pixels, scale: number): Pixels {
-  if (scale >= 1) return { ...src, data: src.data.slice() };
+  if (scale >= 1) return copyPixels(src);
   const width = Math.max(1, Math.round(src.width * scale));
   const height = Math.max(1, Math.round(src.height * scale));
   return upscaleBilinear(downscaleByAveraging(src, width, height), src.width, src.height);
@@ -207,7 +213,7 @@ export function rotate(src: Pixels, degrees: number, fill: Rgb): Pixels {
 }
 
 export function coverRect(src: Pixels, rect: Rect, fill: Rgb): Pixels {
-  const out = { ...src, data: src.data.slice() };
+  const out = copyPixels(src);
   const xEnd = Math.min(src.width, rect.x + rect.width);
   const yEnd = Math.min(src.height, rect.y + rect.height);
   for (let y = Math.max(0, rect.y); y < yEnd; y++) {

@@ -36,3 +36,17 @@ export function contrastRatio(a: string, b: string): number {
   const [lighter, darker] = la > lb ? [la, lb] : [lb, la];
   return (lighter + 0.05) / (darker + 0.05);
 }
+
+function toHex(channel: number): string {
+  return Math.round(Math.min(255, Math.max(0, channel)))
+    .toString(16)
+    .padStart(2, '0');
+}
+
+// Mixes `amount` (0 to 1) of `other` into `base`.
+export function mixColours(base: string, other: string, amount: number): string {
+  const a = parseHexColor(base);
+  const b = parseHexColor(other);
+  const mix = (x: number, y: number) => x + (y - x) * amount;
+  return `#${toHex(mix(a.r, b.r))}${toHex(mix(a.g, b.g))}${toHex(mix(a.b, b.b))}`;
+}

@@ -5,10 +5,21 @@ import type { Paint, Shape, TextShape } from './shapes';
 
 type Context2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
+// Canvas colour stops take one colour string, so per-stop opacity becomes an rgba() colour.
+function withOpacity(color: string, opacity = 1): string {
+  if (opacity >= 1) return color;
+  const { r, g, b } = parseHexColor(color);
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+}
+
 function canvasPaint(context: Context2D, paint: Paint): string | CanvasGradient {
   if (typeof paint === 'string') return paint;
-  const gradient = context.createLinearGradient(paint.x1, paint.y1, paint.x2, paint.y2);
-  for (const [offset, color] of paint.stops) gradient.addColorStop(offset, color);
+  const gradient =
+    paint.kind === 'linear'
+      ? context.createLinearGradient(paint.x1, paint.y1, paint.x2, paint.y2)
+      : context.createRadialGradient(paint.cx, paint.cy, 0, paint.cx, paint.cy, paint.r);
+  for (const [offset, color, opacity] of paint.stops)
+    gradient.addColorStop(offset, withOpacity(color, opacity));
   return gradient;
 }
 
@@ -39,8 +50,10 @@ function drawShape(context: Context2D, shape: Shape) {
   context.save();
   if (shape.kind === 'ring') {
     const outline = new Path2D();
-    addRect(outline, shape.outer, shape.outerRadius);
+    if (shape.outerPath) outline.addPath(new Path2D(shape.outerPath));
+    else addRect(outline, shape.outer, shape.outerRadius);
     addRect(outline, shape.hole, shape.holeRadius);
+    context.globalAlpha = shape.opacity ?? 1;
     context.fillStyle = canvasPaint(context, shape.fill);
     context.fill(outline, 'evenodd');
     context.restore();
@@ -77,11 +90,11 @@ function drawShape(context: Context2D, shape: Shape) {
   context.restore();
 }
 
-// Frame first, then the solid tile and the code on top, then the caption: the same order
+// Scene first, then the solid tile and the code on top, then the caption: the same order
 // the SVG uses, so both outputs layer identically.
 export function drawToCanvas(context: Context2D, plan: DrawPlan): void {
   context.clearRect(0, 0, plan.width, plan.height);
-  for (const shape of plan.frame) drawShape(context, shape);
+  for (const shape of plan.scene) drawShape(context, shape);
   context.fillStyle = plan.background;
   context.fillRect(plan.tile.x, plan.tile.y, plan.tile.width, plan.tile.height);
   context.fillStyle = plan.foreground;
@@ -123,10 +136,15 @@ class SvgPaints {
     if (typeof paint === 'string') return paint;
     const id = `g${this.defs.length}`;
     const stops = paint.stops
-      .map(([offset, color]) => `<stop offset="${n(offset)}" stop-color="${color}"/>`)
+      .map(
+        ([offset, color, opacity]) =>
+          `<stop offset="${n(offset)}" stop-color="${color}"${opacity === undefined ? '' : ` stop-opacity="${n(opacity)}"`}/>`,
+      )
       .join('');
     this.defs.push(
-      `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${n(paint.x1)}" y1="${n(paint.y1)}" x2="${n(paint.x2)}" y2="${n(paint.y2)}">${stops}</linearGradient>`,
+      paint.kind === 'linear'
+        ? `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${n(paint.x1)}" y1="${n(paint.y1)}" x2="${n(paint.x2)}" y2="${n(paint.y2)}">${stops}</linearGradient>`
+        : `<radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="${n(paint.cx)}" cy="${n(paint.cy)}" r="${n(paint.r)}">${stops}</radialGradient>`,
     );
     return `url(#${id})`;
   }
@@ -144,7 +162,9 @@ function svgText(shape: TextShape): string {
 function svgShape(shape: Shape, paints: SvgPaints): string {
   if (shape.kind === 'text') return svgText(shape);
   if (shape.kind === 'ring') {
-    return `<path fill-rule="evenodd" fill="${paints.ref(shape.fill)}" d="${svgRectPath(shape.outer, shape.outerRadius)}${svgRectPath(shape.hole, shape.holeRadius)}"/>`;
+    const outer = shape.outerPath ?? svgRectPath(shape.outer, shape.outerRadius);
+    const opacity = shape.opacity === undefined ? '' : ` opacity="${n(shape.opacity)}"`;
+    return `<path fill-rule="evenodd" fill="${paints.ref(shape.fill)}"${opacity} d="${outer}${svgRectPath(shape.hole, shape.holeRadius)}"/>`;
   }
   const attributes = [
     `fill="${shape.fill ? paints.ref(shape.fill) : 'none'}"`,
@@ -174,7 +194,7 @@ function svgShape(shape: Shape, paints: SvgPaints): string {
 // `fontCss` carries @font-face rules for the caption font so the file looks the same anywhere.
 export function planToSvg(plan: DrawPlan, fontCss = ''): string {
   const paints = new SvgPaints();
-  const frame = plan.frame.map((shape) => svgShape(shape, paints)).join('');
+  const scene = plan.scene.map((shape) => svgShape(shape, paints)).join('');
   const code = plan.darkRects
     .map((rect) => `M${rect.x} ${rect.y}h${rect.width}v${rect.height}h-${rect.width}z`)
     .join('');
@@ -185,7 +205,7 @@ export function planToSvg(plan: DrawPlan, fontCss = ''): string {
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${plan.width}" height="${plan.height}" viewBox="0 0 ${plan.width} ${plan.height}">`,
     defs,
-    frame,
+    scene,
     `<g shape-rendering="crispEdges">`,
     `<rect x="${plan.tile.x}" y="${plan.tile.y}" width="${plan.tile.width}" height="${plan.tile.height}" fill="${plan.background}"/>`,
     `<path fill="${plan.foreground}" d="${code}"/>`,
@@ -201,8 +221,8 @@ export interface Pixels {
   height: number;
 }
 
-function frameBase(plan: DrawPlan): string {
-  const base = plan.frame.find((shape) => shape.kind === 'ring');
+function sceneBase(plan: DrawPlan): string {
+  const base = plan.scene.find((shape) => shape.kind === 'ring');
   if (base?.kind !== 'ring') return plan.background;
   const paint = base.fill;
   const colour = typeof paint === 'string' ? paint : (paint.stops[0]?.[1] ?? plan.background);
@@ -210,12 +230,12 @@ function frameBase(plan: DrawPlan): string {
 }
 
 // Rasterises the code and its tile without a canvas, for places that have none (unit tests).
-// Frame artwork and captions are reduced to the frame's base colour; in a browser, decoding
+// Scene artwork and captions are reduced to the scene's base colour; in a browser, decoding
 // always uses the real canvas image instead (see raster.ts).
 export function planToPixels(plan: DrawPlan): Pixels {
   const { width, height } = plan;
   const data = new Uint8ClampedArray(width * height * 4);
-  const outside = parseHexColor(frameBase(plan));
+  const outside = parseHexColor(sceneBase(plan));
   const bg = parseHexColor(plan.background);
   const fg = parseHexColor(plan.foreground);
   const { tile } = plan;

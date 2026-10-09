@@ -1,52 +1,44 @@
 import { circle, linear, path, rect, type Shape } from '../shapes';
-import { clearPoints, isClear, outline, perimeterPoints, ring, thinnestEdge } from './kit';
-import { CAPTION_FAMILIES, type FrameContext, type SubTheme, type Theme } from './types';
+import {
+  around,
+  backdrop,
+  brokenLine,
+  centre,
+  grow,
+  holdingCaption,
+  organic,
+  scatter,
+  sign,
+  type Sides,
+} from './kit';
+import { shadowUnder } from './classic';
+import { CAPTION_FAMILIES, type SceneContext, type SubTheme, type Theme } from './types';
 
-const even = (value: number) => ({ top: value, right: value, bottom: value, left: value });
 const display = CAPTION_FAMILIES.display;
 
-const CORNERS = [
-  [0, 0, 1, 1],
-  [1, 0, -1, 1],
-  [0, 1, 1, -1],
-  [1, 1, -1, -1],
-] as const;
-
-// Art-deco corner: nested stepped brackets drawn as thin bars.
-function decoCorners(context: FrameContext, colour: string): Shape[] {
-  const w = context.width;
-  const h = context.height;
-  const edge = thinnestEdge(context);
-  const bar = Math.max(1.5, w * 0.004);
-  const shapes: Shape[] = [];
-  for (const [fx, fy, dx, dy] of CORNERS) {
-    const ox = fx * w;
-    const oy = fy * h;
-    for (let step = 0; step < 3; step++) {
-      const at = edge * (0.25 + step * 0.17);
-      const reach = edge * (0.95 - step * 0.2);
-      const x = ox + dx * at;
-      const y = oy + dy * at;
-      shapes.push(
-        rect(Math.min(x, x + dx * reach), y - bar / 2, reach, bar, { fill: colour }),
-        rect(x - bar / 2, Math.min(y, y + dy * reach), bar, reach, { fill: colour }),
-      );
-    }
-    shapes.push(circle(ox + dx * edge * 0.25, oy + dy * edge * 0.25, bar * 1.8, { fill: colour }));
-  }
-  return shapes;
+function shrink(reach: Sides, by: number): Sides {
+  return {
+    top: reach.top - by,
+    right: reach.right - by,
+    bottom: reach.bottom - by,
+    left: reach.left - by,
+  };
 }
 
-function doubleRule(context: FrameContext, colour: string): Shape[] {
-  const w = context.width;
-  const edge = thinnestEdge(context);
-  const line = Math.max(1.5, Math.round(w * 0.004));
-  const full = { x: 0, y: 0, width: w, height: context.height };
-  const at = (fraction: number) => {
-    const by = Math.round(edge * fraction);
-    return { x: by, y: by, width: full.width - 2 * by, height: full.height - 2 * by };
-  };
-  return [outline(at(0.12), line, colour), outline(at(0.2), line, colour)];
+// A beam of light falling from above, wide enough to wash over the whole card.
+function spotlight(scene: SceneContext, colour: string, opacity: number): Shape {
+  const w = scene.size;
+  const [cx] = centre(scene.tile);
+  // The beam must contain the code's corners, or the hole cut for the code would be filled.
+  const beam = path()
+    .polygon([
+      [cx - w * 0.3, -1],
+      [cx + w * 0.3, -1],
+      [w + w * 0.05, w + 1],
+      [-w * 0.05, w + 1],
+    ])
+    .shape({});
+  return organic(scene, beam, linear(0, 0, 0, w, colour, '#000000'), opacity);
 }
 
 const noir: SubTheme = {
@@ -54,15 +46,64 @@ const noir: SubTheme = {
   name: 'Noir',
   swatch: ['#0d0d0d', '#f2ead3'],
   qr: { foreground: '#0d0d0d', background: '#f7f1e1', errorCorrection: 'M' },
-  insets: even(0.1),
-  captionBand: 0.12,
-  caption: { family: display, weight: 700, color: '#f2ead3' },
+  tint: '#c9b98f',
+  codeScale: 0.56,
+  caption: { family: display, weight: 700, color: '#1a1a1a' },
   suggestion: 'Strictly confidential',
-  decorate: (context) => [
-    ring(context, '#0d0d0d'),
-    ...doubleRule(context, '#f2ead3'),
-    ...decoCorners(context, '#f2ead3'),
-  ],
+  paint(scene) {
+    const w = scene.size;
+    const [cx, cy] = centre(scene.tile);
+    const shapes: Shape[] = [backdrop(scene, '#0b0b0c')];
+    shapes.push(spotlight(scene, '#fff3d6', 0.22));
+    shapes.push(
+      backdrop(scene, {
+        kind: 'radial',
+        cx,
+        cy,
+        r: w * 0.62,
+        stops: [
+          [0, '#fff3d6', 0.28],
+          [0.55, '#fff3d6', 0.08],
+          [1, '#000000', 0],
+        ],
+      }),
+    );
+    // Drifting cigarette smoke, very faint.
+    for (const [x, y] of scatter(scene, 5, w * 0.06, w * 0.06)) {
+      const curl = path().moveTo(x, y);
+      for (let k = 0; k < 3; k++)
+        curl.quadTo(
+          x + (k % 2 ? -1 : 1) * w * 0.05,
+          y - w * 0.04 * (k + 0.5),
+          x,
+          y - w * 0.04 * (k + 1),
+        );
+      shapes.push(
+        curl.shape({
+          stroke: '#d8d8d8',
+          lineWidth: Math.max(2, w * 0.012),
+          opacity: 0.08,
+          lineCap: 'round',
+        }),
+      );
+    }
+    // The calling card, casting a hard shadow, with a fine gold border.
+    const reach = holdingCaption(scene, w * 0.06);
+    shapes.push(
+      shadowUnder(
+        scene,
+        { ...reach, right: reach.right + w * 0.02, bottom: reach.bottom + w * 0.02 },
+        0,
+        'rgba(0, 0, 0, 0.7)',
+      ),
+      around(scene, reach, scene.surface),
+    );
+    shapes.push(
+      around(scene, shrink(reach, w * 0.022), '#b08d3c'),
+      around(scene, shrink(reach, w * 0.027), scene.surface),
+    );
+    return shapes;
+  },
 };
 
 const sepia: SubTheme = {
@@ -70,70 +111,65 @@ const sepia: SubTheme = {
   name: 'Sepia film',
   swatch: ['#3b2a1a', '#e8d9b5'],
   qr: { foreground: '#2b1a0c', background: '#f6ecd8', errorCorrection: 'M' },
-  insets: { top: 0.08, right: 0.13, bottom: 0.08, left: 0.13 },
-  captionBand: 0.12,
-  caption: { family: display, weight: 700, color: '#f3e3c3' },
+  tint: '#b58a52',
+  codeScale: 0.56,
+  caption: { family: display, weight: 700, color: '#2b1a0c' },
   suggestion: 'Roll the reel',
-  decorate(context) {
-    const { left, right } = context.edges;
-    const shapes: Shape[] = [ring(context, linear(0, 0, 0, context.height, '#4a3420', '#2e2013'))];
-    // Film strips down both sides, with sprocket holes.
-    for (const band of [left, right]) {
-      const width = band.width * 0.62;
-      const strip = {
-        x: band.x === 0 ? 0 : context.width - width,
-        y: 0,
-        width,
-        height: context.height,
-      };
-      shapes.push(rect(strip.x, strip.y, strip.width, strip.height, { fill: '#1a120b' }));
-      const hole = strip.width * 0.42;
-      for (let y = hole * 0.6; y < context.height - hole; y += hole * 1.7) {
-        shapes.push(
-          rect(strip.x + (strip.width - hole) / 2, y, hole, hole * 0.75, {
-            fill: '#e8d9b5',
-            radius: hole * 0.15,
-          }),
-        );
+  paint(scene) {
+    const w = scene.size;
+    const { tile } = scene;
+    const shapes: Shape[] = [backdrop(scene, linear(0, 0, w, w, '#8a6a43', '#5a4026', '#7b5b37'))];
+    // A strip of film running top to bottom through the scene, the code on one frame.
+    const side = w * 0.085;
+    const strip = { top: tile.y, bottom: w - tile.y - tile.height, left: side, right: side };
+    shapes.push(around(scene, strip, '#1f150c'));
+    const hole = side * 0.36;
+    for (let y = hole * 0.6; y < w; y += hole * 1.9) {
+      for (const x of [tile.x - side * 0.7, tile.x + tile.width + side * 0.7 - hole]) {
+        shapes.push(rect(x, y, hole, hole * 0.75, { fill: '#e8d9b5', radius: hole * 0.15 }));
       }
     }
-    // Faint scratches on the film.
-    for (let i = 0; i < 6; i++) {
-      const x = context.width * (0.2 + context.random() * 0.6);
-      const top = context.edges.top;
-      if (top.height > 4)
-        shapes.push(
-          rect(x, top.y + top.height * 0.15, 1, top.height * 0.6, {
-            fill: '#e8d9b5',
-            opacity: 0.25,
-          }),
-        );
+    // The neighbouring frames, faded.
+    for (const y of [tile.y - tile.height - w * 0.03, tile.y + tile.height + w * 0.03]) {
+      shapes.push(
+        rect(tile.x - side * 0.15, y, tile.width + side * 0.3, tile.height, {
+          fill: '#c9b48a',
+          opacity: 0.35,
+        }),
+      );
     }
+    shapes.push(around(scene, w * 0.015, scene.surface));
+    for (const [x, y] of scatter(scene, 50, w * 0.004, w * 0.02))
+      shapes.push(circle(x, y, Math.max(0.8, w * 0.002), { fill: '#f6ecd8', opacity: 0.5 }));
+    for (let i = 0; i < 5; i++) {
+      const x = w * (0.05 + scene.random() * 0.9);
+      shapes.push(
+        ...brokenLine(x, 0, x + (scene.random() - 0.5) * w * 0.02, w, 10, '#f6ecd8', 1, 0.18),
+      );
+    }
+    shapes.push(...sign(scene, '#e8d9b5', '#2b1a0c', { radius: 0 }));
     return shapes;
   },
 };
 
 function rose(cx: number, cy: number, size: number): Shape[] {
   const r = size / 2;
-  const shapes: Shape[] = [];
-  // Stem and leaf below the bloom.
-  shapes.push(
+  const shapes: Shape[] = [
     path()
       .moveTo(cx, cy + r * 0.6)
-      .quadTo(cx + r * 0.25, cy + r * 1.3, cx - r * 0.1, cy + r * 1.9)
+      .quadTo(cx - r * 0.5, cy + r * 1.4, cx - r * 1.6, cy + r * 1.7)
       .shape({ stroke: '#3d6b35', lineWidth: Math.max(1.5, r * 0.12), lineCap: 'round' }),
     path()
-      .moveTo(cx + r * 0.08, cy + r * 1.2)
-      .quadTo(cx + r * 0.9, cy + r * 0.9, cx + r * 0.75, cy + r * 1.45)
-      .quadTo(cx + r * 0.4, cy + r * 1.5, cx + r * 0.08, cy + r * 1.2)
+      .moveTo(cx - r * 0.7, cy + r * 1.35)
+      .quadTo(cx - r * 0.5, cy + r * 0.8, cx - r * 0.05, cy + r * 1.0)
+      .quadTo(cx - r * 0.3, cy + r * 1.4, cx - r * 0.7, cy + r * 1.35)
       .close()
       .shape({ fill: '#4f8a43' }),
-  );
-  // Petals: overlapping circles from outside in, darker at the heart.
+  ];
   const petals: [number, number, number, string][] = [
-    [-0.45, 0.1, 0.55, '#8c0f24'],
-    [0.45, 0.1, 0.55, '#8c0f24'],
-    [0, 0.35, 0.55, '#a3132c'],
+    [-0.45, 0.1, 0.55, '#7a0c1e'],
+    [0.45, 0.1, 0.55, '#7a0c1e'],
+    [0, 0.35, 0.55, '#940f26'],
     [-0.2, -0.2, 0.5, '#b3122e'],
     [0.2, -0.2, 0.5, '#c21a36'],
     [0, -0.05, 0.38, '#d6264a'],
@@ -152,61 +188,121 @@ function rose(cx: number, cy: number, size: number): Shape[] {
 const redRose: SubTheme = {
   id: 'rose',
   name: 'Red rose',
-  swatch: ['#121212', '#c21a36'],
+  swatch: ['#2a0610', '#c21a36'],
   qr: { foreground: '#1a0508', background: '#fbf3f3', errorCorrection: 'M' },
-  insets: even(0.11),
-  captionBand: 0.12,
-  caption: { family: display, weight: 700, color: '#f2c4cb' },
+  tint: '#c97884',
+  codeScale: 0.54,
+  caption: { family: display, weight: 700, color: '#5e0a18' },
   suggestion: 'A rose for you',
-  decorate(context) {
-    const w = context.width;
-    const h = context.height;
-    const edge = thinnestEdge(context);
+  paint(scene) {
+    const w = scene.size;
+    const { tile } = scene;
+    const [cx, cy] = centre(tile);
     const shapes: Shape[] = [
-      ring(context, '#121212'),
-      outline(
-        { x: edge * 0.15, y: edge * 0.15, width: w - edge * 0.3, height: h - edge * 0.3 },
-        Math.max(1.5, Math.round(w * 0.004)),
-        '#8c0f24',
+      backdrop(scene, {
+        kind: 'radial',
+        cx,
+        cy,
+        r: w * 0.75,
+        stops: [
+          [0, '#5a0d1d'],
+          [1, '#14030a'],
+        ],
+      }),
+    ];
+    // Folds in the velvet: soft diagonal sheens.
+    for (let i = -4; i < 8; i++)
+      shapes.push(
+        ...brokenLine(i * w * 0.14, 0, i * w * 0.14 + w * 0.5, w, 12, '#ffffff', w * 0.025, 0.035),
+      );
+    for (const [x, y] of scatter(scene, 8, w * 0.02, w * 0.05))
+      shapes.push(circle(x, y, w * 0.012, { fill: '#b3122e', opacity: 0.8 }));
+    const reach = holdingCaption(scene, w * 0.05);
+    shapes.push(
+      shadowUnder(scene, reach, w * 0.006, 'rgba(0, 0, 0, 0.55)'),
+      around(scene, reach, scene.surface, w * 0.006),
+    );
+    shapes.push(
+      around(
+        scene,
+        {
+          top: reach.top - w * 0.018,
+          bottom: reach.bottom - w * 0.018,
+          left: reach.left - w * 0.018,
+          right: reach.right - w * 0.018,
+        },
+        '#b3122e',
       ),
-    ];
-    const size = edge * 0.5;
-    const spots: [number, number][] = [
-      [edge * 0.5, edge * 0.42],
-      [w - edge * 0.5, h - edge * 0.85],
-    ];
-    for (const [x, y] of spots)
-      if (isClear(context, x, y + size * 0.4, size * 1.05)) shapes.push(...rose(x, y, size));
+    );
+    shapes.push(
+      around(
+        scene,
+        {
+          top: reach.top - w * 0.022,
+          bottom: reach.bottom - w * 0.022,
+          left: reach.left - w * 0.022,
+          right: reach.right - w * 0.022,
+        },
+        scene.surface,
+      ),
+    );
+    // The rose lies over the card's corner, just clear of the code.
+    shapes.push(...rose(tile.x + tile.width + w * 0.1, tile.y + tile.height + w * 0.09, w * 0.15));
     return shapes;
   },
 };
 
-// A quarter-circle fan with radiating ribs.
-function fan(cx: number, cy: number, radius: number, colour: string, upward: boolean): Shape[] {
-  const dir = upward ? -1 : 1;
-  const shapes: Shape[] = [];
-  const arc = path().moveTo(cx - radius, cy);
-  arc
-    .cubicTo(
-      cx - radius,
-      cy + dir * radius * 1.33,
-      cx + radius,
-      cy + dir * radius * 1.33,
-      cx + radius,
-      cy,
-    )
-    .close();
-  shapes.push(arc.shape({ stroke: colour, lineWidth: Math.max(1, radius * 0.06) }));
+// A fan of radiating ribs: the art-deco sunburst.
+function fan(cx: number, cy: number, radius: number, colour: string, line: number): Shape[] {
+  const shapes: Shape[] = [
+    path()
+      .moveTo(cx - radius, cy)
+      .cubicTo(cx - radius, cy - radius * 1.33, cx + radius, cy - radius * 1.33, cx + radius, cy)
+      .shape({ stroke: colour, lineWidth: line }),
+  ];
   for (let i = 1; i < 6; i++) {
     const angle = (Math.PI * i) / 6;
     shapes.push(
       path()
         .moveTo(cx, cy)
-        .lineTo(cx - Math.cos(angle) * radius * 0.95, cy + dir * Math.sin(angle) * radius * 0.95)
-        .shape({ stroke: colour, lineWidth: Math.max(1, radius * 0.05) }),
+        .lineTo(cx - Math.cos(angle) * radius * 0.95, cy - Math.sin(angle) * radius * 0.95)
+        .shape({ stroke: colour, lineWidth: line * 0.8 }),
     );
   }
   return shapes;
+}
+
+// A plaque with stepped art-deco corners.
+function stepped(scene: SceneContext, reach: Sides, step: number): Shape {
+  const box = grow(scene.tile, reach);
+  const x0 = box.x;
+  const y0 = box.y;
+  const x1 = box.x + box.width;
+  const y1 = box.y + box.height;
+  return path()
+    .polygon([
+      [x0 + step, y0],
+      [x1 - step, y0],
+      [x1 - step, y0 + step / 2],
+      [x1 - step / 2, y0 + step / 2],
+      [x1 - step / 2, y0 + step],
+      [x1, y0 + step],
+      [x1, y1 - step],
+      [x1 - step / 2, y1 - step],
+      [x1 - step / 2, y1 - step / 2],
+      [x1 - step, y1 - step / 2],
+      [x1 - step, y1],
+      [x0 + step, y1],
+      [x0 + step, y1 - step / 2],
+      [x0 + step / 2, y1 - step / 2],
+      [x0 + step / 2, y1 - step],
+      [x0, y1 - step],
+      [x0, y0 + step],
+      [x0 + step / 2, y0 + step],
+      [x0 + step / 2, y0 + step / 2],
+      [x0 + step, y0 + step / 2],
+    ])
+    .shape({});
 }
 
 const goldDeco: SubTheme = {
@@ -214,40 +310,28 @@ const goldDeco: SubTheme = {
   name: 'Gold deco',
   swatch: ['#111111', '#d4af37'],
   qr: { foreground: '#111111', background: '#fbf6e6', errorCorrection: 'M' },
-  insets: even(0.11),
-  captionBand: 0.12,
-  caption: { family: display, weight: 700, color: '#e6c766' },
+  tint: '#d4af37',
+  codeScale: 0.54,
+  caption: { family: display, weight: 700, color: '#111111' },
   suggestion: 'Members only',
-  decorate(context) {
-    const edge = thinnestEdge(context);
-    const shapes: Shape[] = [ring(context, '#111111'), ...doubleRule(context, '#d4af37')];
-    const radius = edge * 0.4;
-    for (const band of [context.edges.top, context.edges.bottom]) {
-      const upward = band.y > 0;
-      const baseY = upward ? band.y + band.height * 0.82 : band.y + band.height * 0.18;
-      for (let x = radius * 1.4; x < context.width - radius; x += radius * 2.1) {
-        // The fan's control points reach 1.33 radii out, so clear that whole box.
-        if (isClear(context, x, baseY + (upward ? -radius / 2 : radius / 2), radius * 0.9))
-          shapes.push(...fan(x, baseY, radius, '#d4af37', upward));
-      }
+  paint(scene) {
+    const w = scene.size;
+    const shapes: Shape[] = [backdrop(scene, '#101010')];
+    // A wall of gold fans, row on row.
+    const r = w * 0.06;
+    const line = Math.max(1, w * 0.0025);
+    for (let row = 0; row * r < w + r; row++) {
+      for (let x = (row % 2) * r; x < w + r; x += r * 2)
+        shapes.push(...fan(x, row * r, r, '#8a7128', line));
     }
-    for (const [x, y] of clearPoints(
-      context,
-      perimeterPoints(context, edge * 0.5, edge * 1.2),
-      edge * 0.08,
-    )) {
-      if (y > edge && y < context.height - edge)
-        shapes.push(
-          path()
-            .polygon([
-              [x, y - edge * 0.08],
-              [x + edge * 0.06, y],
-              [x, y + edge * 0.08],
-              [x - edge * 0.06, y],
-            ])
-            .shape({ fill: '#d4af37' }),
-        );
-    }
+    const reach = holdingCaption(scene, w * 0.075);
+    const step = w * 0.035;
+    shapes.push(
+      organic(scene, stepped(scene, reach, step), '#d4af37'),
+      organic(scene, stepped(scene, shrink(reach, w * 0.012), step * 0.85), '#111111'),
+      organic(scene, stepped(scene, shrink(reach, w * 0.018), step * 0.75), '#d4af37'),
+      organic(scene, stepped(scene, shrink(reach, w * 0.023), step * 0.68), scene.surface),
+    );
     return shapes;
   },
 };
@@ -255,54 +339,61 @@ const goldDeco: SubTheme = {
 const smokyJazz: SubTheme = {
   id: 'jazz',
   name: 'Smoky jazz',
-  swatch: ['#3a3a3a', '#f5f5f5'],
-  qr: { foreground: '#1a1a1a', background: '#f5f5f5', errorCorrection: 'M' },
-  insets: { top: 0.1, right: 0.09, bottom: 0.14, left: 0.09 },
-  captionBand: 0.12,
-  caption: { family: display, weight: 700, color: '#ececec' },
+  swatch: ['#2a2a2e', '#ff5fa2'],
+  qr: { foreground: '#1a1a1a', background: '#f6f3ef', errorCorrection: 'M' },
+  tint: '#ff8fbd',
+  codeScale: 0.52,
+  caption: { family: display, weight: 700, color: '#1a1a1a' },
   suggestion: 'Late night jazz',
-  decorate(context) {
-    const w = context.width;
-    const shapes: Shape[] = [ring(context, linear(0, 0, 0, context.height, '#4a4a4a', '#1f1f1f'))];
-    // Soft smoke curling up the sides.
-    for (let i = 0; i < 5; i++) {
-      const band = i % 2 === 0 ? context.edges.left : context.edges.right;
-      const x = band.x + band.width * (0.3 + context.random() * 0.4);
-      const curl = path().moveTo(x, context.height * (0.9 - i * 0.05));
-      let y = context.height * (0.9 - i * 0.05);
-      for (let k = 0; k < 4; k++) {
-        const ny = y - context.height * 0.15;
-        curl.quadTo(x + (k % 2 === 0 ? 1 : -1) * band.width * 0.2, (y + ny) / 2, x, ny);
-        y = ny;
-      }
+  paint(scene) {
+    const w = scene.size;
+    const { tile } = scene;
+    const shapes: Shape[] = [backdrop(scene, linear(0, 0, 0, w, '#1c1c22', '#2e2a33', '#141418'))];
+    // Piano keys along the bottom of the club.
+    const keysTop = w * 0.84;
+    const keyWidth = w / 18;
+    for (let i = 0; i < 18; i++)
       shapes.push(
-        curl.shape({
-          stroke: '#d0d0d0',
-          lineWidth: Math.max(2, band.width * 0.12),
-          opacity: 0.18,
-          lineCap: 'round',
-        }),
+        rect(i * keyWidth + 1, keysTop, keyWidth - 2, w - keysTop, { fill: '#f2f2f2', radius: 2 }),
       );
-    }
-    // Piano keys along the bottom edge.
-    const bottom = context.edges.bottom;
-    const keysTop = bottom.y + bottom.height * 0.42;
-    const keyHeight = bottom.y + bottom.height - keysTop - bottom.height * 0.12;
-    const keyWidth = w / 22;
-    for (let i = 0; i < 22; i++) {
-      shapes.push(
-        rect(i * keyWidth + 1, keysTop, keyWidth - 2, keyHeight, { fill: '#f5f5f5', radius: 2 }),
-      );
-    }
-    for (let i = 0; i < 22; i++) {
+    for (let i = 0; i < 18; i++) {
       if ([2, 6].includes(i % 7)) continue;
       shapes.push(
-        rect((i + 1) * keyWidth - keyWidth * 0.3, keysTop, keyWidth * 0.6, keyHeight * 0.6, {
-          fill: '#111111',
+        rect((i + 1) * keyWidth - keyWidth * 0.3, keysTop, keyWidth * 0.6, (w - keysTop) * 0.6, {
+          fill: '#0e0e0e',
           radius: 1,
         }),
       );
     }
+    // Smoke drifting up past the sign.
+    for (const [x, y] of scatter(scene, 14, w * 0.06, w * 0.02))
+      shapes.push(
+        circle(x, y, w * (0.04 + scene.random() * 0.05), { fill: '#d9d4e0', opacity: 0.06 }),
+      );
+    // The club sign hanging on chains, ringed with a pink neon tube.
+    const reach = holdingCaption(scene, w * 0.06);
+    const top = tile.y - reach.top;
+    for (const x of [tile.x + tile.width * 0.2, tile.x + tile.width * 0.8])
+      shapes.push(rect(x - 1, 0, 2, top, { fill: '#8a8a8a' }));
+    shapes.push(
+      around(
+        scene,
+        {
+          top: reach.top + w * 0.012,
+          bottom: reach.bottom + w * 0.012,
+          left: reach.left + w * 0.012,
+          right: reach.right + w * 0.012,
+        },
+        '#ff5fa2',
+        w * 0.04,
+        0.35,
+      ),
+    );
+    shapes.push(
+      around(scene, reach, '#ff5fa2', w * 0.035),
+      around(scene, shrink(reach, w * 0.008), '#2a2a2e', w * 0.03),
+      around(scene, shrink(reach, w * 0.016), scene.surface, w * 0.025),
+    );
     return shapes;
   },
 };
