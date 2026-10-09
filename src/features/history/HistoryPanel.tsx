@@ -13,13 +13,13 @@ const timeFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', tim
 
 export function HistoryPanel({ entries, problem, onUse, onDelete, onClear }: HistoryPanelProps) {
   return (
-    <section className="panel" aria-labelledby="history-heading">
+    <section className="panel panel--white panel--history" aria-labelledby="history-heading">
       <div className="panel__header">
         <h2 id="history-heading" className="panel__title">
           Recent codes
         </h2>
         {entries.length > 0 && (
-          <button type="button" className="button button--quiet" onClick={onClear}>
+          <button type="button" className="button button--small" onClick={onClear}>
             Clear all
           </button>
         )}
@@ -61,7 +61,7 @@ export function HistoryPanel({ entries, problem, onUse, onDelete, onClear }: His
                 </button>
                 <button
                   type="button"
-                  className="button button--quiet history__delete"
+                  className="button button--small history__delete"
                   aria-label={`Delete ${typeLabel(entry.type)} ${summary}`}
                   onClick={() => onDelete(entry.id)}
                 >

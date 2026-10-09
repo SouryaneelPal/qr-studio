@@ -181,7 +181,7 @@ export function WifiForm({
             trailing={
               <button
                 type="button"
-                className="button button--quiet field__toggle"
+                className="button button--small field__toggle"
                 aria-controls="wifi-password"
                 aria-pressed={showPassword}
                 onClick={() => setShowPassword((shown) => !shown)}

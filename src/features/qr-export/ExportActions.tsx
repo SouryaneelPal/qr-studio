@@ -64,7 +64,7 @@ export function ExportActions({ type, plan, onExported }: ExportActionsProps) {
         <button type="button" className="button" onClick={() => void copyImage()}>
           Copy image
         </button>
-        <button type="button" className="button button--quiet" onClick={saveToRecent}>
+        <button type="button" className="button" onClick={saveToRecent}>
           Save to recent
         </button>
       </div>

@@ -13,7 +13,10 @@ interface QrPreviewProps {
 
 export function QrPreview({ model, pending, actions }: QrPreviewProps) {
   return (
-    <section className="panel preview" aria-labelledby="preview-heading">
+    <section
+      className="panel panel--lilac panel--preview preview"
+      aria-labelledby="preview-heading"
+    >
       <h2 id="preview-heading" className="panel__title">
         Preview
       </h2>

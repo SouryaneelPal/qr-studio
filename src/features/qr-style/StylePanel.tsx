@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import type { ErrorCorrection } from '../../lib/capacity/capacity';
 import {
   ERROR_CORRECTION_LEVELS,
@@ -20,9 +21,14 @@ const EC_DESCRIPTIONS: Record<ErrorCorrection, string> = {
   H: 'High · about 30%',
 };
 
+// WebKit has no pseudo-element for the filled part of a range track, so the CSS paints it from this.
+function sliderFill(value: number, min: number, max: number): CSSProperties {
+  return { '--fill': `${((value - min) / (max - min)) * 100}%` } as CSSProperties;
+}
+
 export function StylePanel({ style, onChange }: StylePanelProps) {
   return (
-    <section className="panel" aria-labelledby="style-heading">
+    <section className="panel panel--butter panel--style" aria-labelledby="style-heading">
       <h2 id="style-heading" className="panel__title">
         Style
       </h2>
@@ -70,6 +76,7 @@ export function StylePanel({ style, onChange }: StylePanelProps) {
             max={SIZE_RANGE.max}
             step={16}
             value={style.size}
+            style={sliderFill(style.size, SIZE_RANGE.min, SIZE_RANGE.max)}
             onChange={(event) => onChange({ size: Number(event.target.value) })}
           />
         </div>
@@ -88,6 +95,7 @@ export function StylePanel({ style, onChange }: StylePanelProps) {
             max={MARGIN_RANGE.max}
             step={1}
             value={style.margin}
+            style={sliderFill(style.margin, MARGIN_RANGE.min, MARGIN_RANGE.max)}
             onChange={(event) => onChange({ margin: Number(event.target.value) })}
           />
         </div>

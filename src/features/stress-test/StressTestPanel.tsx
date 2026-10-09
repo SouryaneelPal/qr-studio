@@ -18,7 +18,7 @@ export function StressTestPanel({ request }: StressTestPanelProps) {
   }
 
   return (
-    <section className="panel stress" aria-labelledby="stress-heading">
+    <section className="panel panel--peach panel--stress stress" aria-labelledby="stress-heading">
       <div className="panel__header">
         <h2 id="stress-heading" className="panel__title">
           Stress test

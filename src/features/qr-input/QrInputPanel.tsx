@@ -29,7 +29,7 @@ export function QrInputPanel({
   wifiPasswordNeeded,
 }: QrInputPanelProps) {
   return (
-    <section className="panel" aria-labelledby="content-heading">
+    <section className="panel panel--mint panel--content" aria-labelledby="content-heading">
       <h2 id="content-heading" className="panel__title">
         Content
       </h2>

@@ -30,7 +30,7 @@ export function CapacityMeter({ capacity, advice }: CapacityMeterProps) {
       </label>
       <meter
         id="capacity-meter"
-        className="capacity__meter"
+        className={`capacity__meter${capacity.fillRatio > 0.8 ? ' capacity__meter--high' : ''}`}
         min={0}
         max={1}
         low={0.75}

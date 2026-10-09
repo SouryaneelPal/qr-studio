@@ -56,14 +56,16 @@ export function App() {
     <div className="app">
       <header className="masthead">
         <div>
-          <h1 className="masthead__title">QR Studio</h1>
+          <h1 className="masthead__title">
+            QR <span className="masthead__sticker">Studio</span>
+          </h1>
           <p className="masthead__tagline">
             Make QR codes that scan. Everything stays on your device.
           </p>
         </div>
         <button
           type="button"
-          className="button button--quiet theme-toggle"
+          className="theme-toggle"
           aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
           onClick={toggleTheme}
         >
