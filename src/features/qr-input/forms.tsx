@@ -26,6 +26,7 @@ export function UrlForm({
   return (
     <Field
       id="url"
+      placeholder="example.com"
       label="Web address"
       value={input.url}
       inputType="url"
@@ -51,6 +52,7 @@ export function TextForm({ input, errors, onChange }: FormProps<TextInput>) {
   return (
     <Field
       id="text"
+      placeholder="Type anything: a note, a quote, a secret handshake…"
       label="Your text"
       value={input.text}
       multiline
@@ -67,6 +69,7 @@ export function EmailForm({ input, errors, onChange }: FormProps<EmailInput>) {
     <>
       <Field
         id="email-address"
+        placeholder="you@example.com"
         label="Email address"
         value={input.address}
         inputType="email"
@@ -78,12 +81,14 @@ export function EmailForm({ input, errors, onChange }: FormProps<EmailInput>) {
       />
       <Field
         id="email-subject"
+        placeholder="Let’s catch up"
         label="Subject"
         value={input.subject}
         onChange={(subject) => onChange({ subject })}
       />
       <Field
         id="email-body"
+        placeholder="Hi! Just wanted to say…"
         label="Message"
         value={input.body}
         multiline
@@ -97,6 +102,7 @@ export function PhoneForm({ input, errors, onChange }: FormProps<PhoneInput>) {
   return (
     <Field
       id="phone"
+      placeholder="+91 98765 43210"
       label="Phone number"
       value={input.phone}
       inputType="tel"
@@ -138,6 +144,7 @@ export function WifiForm({
     <>
       <Field
         id="wifi-ssid"
+        placeholder="Home Wi-Fi"
         label="Network name (SSID)"
         value={input.ssid}
         required

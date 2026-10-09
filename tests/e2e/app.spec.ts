@@ -69,16 +69,11 @@ test('invalid input shows errors', async ({ page }) => {
   await expect(phone).toHaveAccessibleDescription(/7 to 15 digits/);
 });
 
-test('downloaded PNG matches the chosen size and decodes back to the payload', async ({ page }) => {
-  await chooseType(page, 'Text');
-  await page.getByLabel('Your text').fill('Download check ✓');
-  await expectScans(page);
-
+async function downloadAndDecode(page: Page) {
   const [download] = await Promise.all([
     page.waitForEvent('download'),
     page.getByRole('button', { name: 'Download PNG' }).click(),
   ]);
-  expect(download.suggestedFilename()).toMatch(/^qr-text-\d{8}-\d{6}\.png$/);
   const path = await download.path();
   const base64 = (await readFile(path)).toString('base64');
 
@@ -93,13 +88,53 @@ test('downloaded PNG matches the chosen size and decodes back to the payload', a
     return { width: pixels.width, height: pixels.height, data: Array.from(pixels.data) };
   }, base64);
 
-  expect(image.width).toBe(512);
-  expect(image.height).toBe(512);
   const decoded = jsQR(Uint8ClampedArray.from(image.data), image.width, image.height);
-  expect(decoded).not.toBeNull();
-  expect(new TextDecoder().decode(Uint8Array.from(decoded?.binaryData ?? []))).toBe(
-    'Download check ✓',
-  );
+  const text = decoded ? new TextDecoder().decode(Uint8Array.from(decoded.binaryData)) : null;
+  return { fileName: download.suggestedFilename(), width: image.width, height: image.height, text };
+}
+
+async function chooseTheme(page: Page, theme: string, subTheme: string) {
+  await page.getByRole('group', { name: 'Theme' }).getByRole('radio', { name: theme }).check();
+  await page
+    .getByRole('group', { name: `${theme} styles` })
+    .getByRole('radio', { name: subTheme })
+    .check();
+}
+
+test('downloaded PNG matches the chosen size and decodes back to the payload', async ({ page }) => {
+  await chooseType(page, 'Text');
+  await page.getByLabel('Your text').fill('Download check ✓');
+  await expectScans(page);
+
+  const result = await downloadAndDecode(page);
+  expect(result.fileName).toMatch(/^qr-text-\d{8}-\d{6}\.png$/);
+  expect(result.width).toBe(512);
+  expect(result.height).toBe(512);
+  expect(result.text).toBe('Download check ✓');
+});
+
+test('themed PNGs with custom captions decode back to the payload', async ({ page }) => {
+  const payload = 'https://gdg.community.dev/srm';
+  await page.getByLabel('Web address').fill(payload);
+
+  const designs = [
+    { theme: 'Superhero', subTheme: 'Doomsday', caption: 'Final hour 🔥 join us' },
+    { theme: 'Pookie', subTheme: 'Bunny', caption: 'Hop in, pookie' },
+    { theme: 'Bollywood', subTheme: 'Rangoli', caption: 'शुभ आरंभ • GDG SRM' },
+  ];
+  for (const design of designs) {
+    await chooseTheme(page, design.theme, design.subTheme);
+    await page.getByLabel('Caption text').fill(design.caption);
+    await expect(
+      page.getByRole('img', { name: new RegExp(`captioned “${design.caption}”`) }),
+    ).toBeVisible();
+    await expectScans(page);
+
+    const result = await downloadAndDecode(page);
+    expect(result.width).toBe(512);
+    expect(result.height, 'the frame and caption make the image taller').toBeGreaterThan(512);
+    expect(result.text, `${design.theme} / ${design.subTheme}`).toBe(payload);
+  }
 });
 
 test('recent codes survive a reload', async ({ page }) => {
@@ -148,6 +183,8 @@ test('stress test runs and reports each condition', async ({ page }) => {
 test('no horizontal overflow at 360 px wide', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 780 });
   await page.getByLabel('Web address').fill(`example.com/${'very-long-path-segment-'.repeat(8)}`);
+  await chooseTheme(page, 'Mafia Noir', 'Smoky jazz');
+  await page.getByLabel('Caption text').fill('Late night jazz at the corner club!');
   await expectScans(page);
   await page.getByRole('button', { name: 'Save to recent' }).click();
 
@@ -178,6 +215,10 @@ test('makes no network requests after the page loads', async ({ page }) => {
   await page.getByLabel('Password', { exact: true }).fill('correct horse');
   await expectScans(page);
   await page.getByRole('button', { name: /Midnight/ }).click();
+  await chooseTheme(page, "Retro '80s", 'Neon arcade');
+  await page.getByLabel('Caption text').fill('Insert coin 🕹️ now');
+  await page.getByRole('radio', { name: 'Top' }).check();
+  await expectScans(page);
   await page.getByRole('button', { name: 'Run stress test' }).click();
   await expect(page.getByTestId('stress-summary')).toContainText(/Survives \d\/5/);
   await Promise.all([

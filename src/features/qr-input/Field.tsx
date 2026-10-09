@@ -15,6 +15,7 @@ interface FieldProps {
   required?: boolean;
   revealError?: boolean;
   trailing?: ReactNode;
+  placeholder?: string;
 }
 
 export function Field({
@@ -31,6 +32,7 @@ export function Field({
   required = false,
   revealError = false,
   trailing,
+  placeholder,
 }: FieldProps) {
   const reveal = useRevealAfterPause();
   const visibleError = reveal.revealed || revealError ? error : undefined;
@@ -46,6 +48,7 @@ export function Field({
     'aria-invalid': visibleError ? true : undefined,
     'aria-describedby': describedBy,
     onBlur: reveal.onBlur,
+    placeholder,
   };
 
   return (

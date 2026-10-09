@@ -1,4 +1,5 @@
 import { describeInput, typeLabel } from '../../lib/payload/describe';
+import { SectionHint } from '../guide/SectionHint';
 import { STORAGE_NOTICES, type HistoryEntry, type StorageProblem } from '../../lib/storage/history';
 
 interface HistoryPanelProps {
@@ -15,9 +16,14 @@ export function HistoryPanel({ entries, problem, onUse, onDelete, onClear }: His
   return (
     <section className="panel panel--white panel--history" aria-labelledby="history-heading">
       <div className="panel__header">
-        <h2 id="history-heading" className="panel__title">
-          Recent codes
-        </h2>
+        <div className="panel__heading">
+          <h2 id="history-heading" className="panel__title">
+            Recent codes
+          </h2>
+          <SectionHint section="Recent codes">
+            Codes you download, copy or save, kept only in this browser. Tap one to reuse it.
+          </SectionHint>
+        </div>
         {entries.length > 0 && (
           <button type="button" className="button button--small" onClick={onClear}>
             Clear all
@@ -33,7 +39,7 @@ export function HistoryPanel({ entries, problem, onUse, onDelete, onClear }: His
 
       {entries.length === 0 ? (
         <p className="muted">
-          Codes you download, copy or save appear here. Nothing leaves this device.
+          No codes yet. Download, copy or save one and it’ll wait for you here, on this device only.
         </p>
       ) : (
         <ul className="history" aria-label="Recent codes">

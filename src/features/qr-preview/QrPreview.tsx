@@ -4,6 +4,8 @@ import { CapacityMeter } from './CapacityMeter';
 import { QrCanvas } from './QrCanvas';
 import { ScanStatus } from './ScanStatus';
 import { WarningList } from './WarningList';
+import { Mascot } from '../guide/Mascot';
+import { SectionHint } from '../guide/SectionHint';
 
 interface QrPreviewProps {
   model: PreviewModel;
@@ -17,21 +19,36 @@ export function QrPreview({ model, pending, actions }: QrPreviewProps) {
       className="panel panel--lilac panel--preview preview"
       aria-labelledby="preview-heading"
     >
-      <h2 id="preview-heading" className="panel__title">
-        Preview
-      </h2>
+      <div className="panel__header">
+        <div className="panel__heading">
+          <h2 id="preview-heading" className="panel__title">
+            Preview
+          </h2>
+          <SectionHint section="Preview">
+            Your code exactly as it will download. We scan it ourselves after every change.
+          </SectionHint>
+        </div>
+      </div>
 
       <div className="preview__stage">
         {model.state === 'ready' ? (
           <QrCanvas plan={model.plan} altText={model.altText} />
         ) : (
           <div className="preview__placeholder">
-            {model.state === 'error' ? 'Can’t draw this code' : 'Your code appears here'}
+            {model.state === 'error'
+              ? 'Can’t draw this code'
+              : 'Type something and your code pops up here'}
           </div>
         )}
       </div>
 
-      <ScanStatus check={model.state === 'ready' ? model.scan : null} pending={pending} />
+      <div className="scan-row">
+        <Mascot
+          mood={model.state !== 'ready' ? 'idle' : model.scan.status === 'ok' ? 'happy' : 'worried'}
+          className="scan-row__mascot"
+        />
+        <ScanStatus check={model.state === 'ready' ? model.scan : null} pending={pending} />
+      </div>
 
       {model.state === 'error' && (
         <div className="preview__error" role="alert">

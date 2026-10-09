@@ -19,7 +19,12 @@ export interface StressRunner {
 
 // Runs on the calling thread, after yielding once so the click that started it can paint.
 function runSoon(request: StressRequest): Promise<StressReport> {
-  return new Promise((resolve) => setTimeout(() => resolve(runStressTest(request)), 0));
+  // Pixels already transferred to a worker are detached here; fall back to the plan.
+  const usable =
+    request.pixels && request.pixels.data.byteLength > 0
+      ? request
+      : { ...request, pixels: undefined };
+  return new Promise((resolve) => setTimeout(() => resolve(runStressTest(usable)), 0));
 }
 
 // A run takes 10–40 ms for typical codes but over a second for a version-40 code at 1024 px,
@@ -65,7 +70,9 @@ export function createStressRunner(): StressRunner {
       return new Promise((resolve) => {
         pending.set(id, { request, resolve });
         try {
-          ensureWorker().postMessage({ id, request } satisfies StressJob);
+          // Transfer the pixel buffer rather than copying megabytes of image data.
+          const transfer = request.pixels ? [request.pixels.data.buffer] : [];
+          ensureWorker().postMessage({ id, request } satisfies StressJob, transfer);
         } catch {
           finishOnMainThread();
         }

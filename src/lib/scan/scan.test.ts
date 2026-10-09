@@ -1,3 +1,4 @@
+import { planToPixels } from '../render/outputs';
 import { renderQr } from '../render/renderQr';
 import { DEFAULT_STYLE, type QrStyle } from '../render/style';
 import { readabilityWarnings } from './readability';
@@ -15,13 +16,13 @@ describe('selfCheck', () => {
   it('confirms a code that reads back exactly', () => {
     const result = renderQr('नमस्ते 🎉', style);
     if (!result.ok) throw new Error(result.error);
-    expect(selfCheck(result.plan, 'नमस्ते 🎉')).toEqual({ status: 'ok' });
+    expect(selfCheck(planToPixels(result.plan), 'नमस्ते 🎉')).toEqual({ status: 'ok' });
   });
 
   it('flags content that reads back differently', () => {
     const result = renderQr('first', style);
     if (!result.ok) throw new Error(result.error);
-    expect(selfCheck(result.plan, 'second')).toMatchObject({ status: 'fail' });
+    expect(selfCheck(planToPixels(result.plan), 'second')).toMatchObject({ status: 'fail' });
   });
 
   it('fails when the colours are identical', () => {
@@ -31,7 +32,7 @@ describe('selfCheck', () => {
       background: '#888888',
     });
     if (!result.ok) throw new Error(result.error);
-    expect(selfCheck(result.plan, 'same colours')).toMatchObject({
+    expect(selfCheck(planToPixels(result.plan), 'same colours')).toMatchObject({
       status: 'fail',
       reason: expect.stringContaining('couldn’t find'),
     });

@@ -1,6 +1,9 @@
 import { QR_TYPES, type QrInputs, type QrType, type WifiSecurity } from '../payload/types';
+import { CAPTION_MAX_LENGTH, graphemes, type CaptionSettings } from '../render/caption';
 import { isHexColor } from '../render/color';
+import { DEFAULT_DESIGN, type QrDesign } from '../render/renderQr';
 import { ERROR_CORRECTION_LEVELS, MARGIN_RANGE, SIZE_RANGE, type QrStyle } from '../render/style';
+import { isThemeChoice } from '../render/themes';
 
 export const HISTORY_KEY = 'qr-studio:history:v1';
 export const HISTORY_LIMIT = 20;
@@ -12,6 +15,7 @@ export type HistoryEntry = {
     type: K;
     input: QrInputs[K];
     style: QrStyle;
+    design: QrDesign;
     // Set when a Wi-Fi password was deliberately left out of storage.
     passwordOmitted: boolean;
   };
@@ -23,9 +27,11 @@ export function createEntry<K extends QrType>(
   type: K,
   input: QrInputs[K],
   style: QrStyle,
-  options: { rememberWifiPassword: boolean; now?: number; id?: string },
+  options: { rememberWifiPassword: boolean; design?: QrDesign; now?: number; id?: string },
 ): HistoryEntry {
   const now = options.now ?? Date.now();
+  const source = options.design ?? DEFAULT_DESIGN;
+  const design = { theme: { ...source.theme }, caption: { ...source.caption } };
   const id = options.id ?? `${now.toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
   if (type === 'wifi') {
@@ -37,6 +43,7 @@ export function createEntry<K extends QrType>(
       type: 'wifi',
       input: { ...wifi, password: omit || wifi.security === 'nopass' ? '' : wifi.password },
       style: { ...style },
+      design,
       passwordOmitted: omit,
     };
   }
@@ -46,6 +53,7 @@ export function createEntry<K extends QrType>(
     type,
     input: { ...input },
     style: { ...style },
+    design,
     passwordOmitted: false,
   } as HistoryEntry;
 }
@@ -55,7 +63,8 @@ function sameContent(a: HistoryEntry, b: HistoryEntry): boolean {
     a.type === b.type &&
     a.passwordOmitted === b.passwordOmitted &&
     JSON.stringify(a.input) === JSON.stringify(b.input) &&
-    JSON.stringify(a.style) === JSON.stringify(b.style)
+    JSON.stringify(a.style) === JSON.stringify(b.style) &&
+    JSON.stringify(a.design) === JSON.stringify(b.design)
   );
 }
 
@@ -119,19 +128,40 @@ function parseInput(type: QrType, value: unknown): QrInputs[QrType] | null {
   }
 }
 
+function parseCaption(value: unknown): CaptionSettings | null {
+  if (!isRecord(value)) return null;
+  const { enabled, text, position } = value;
+  if (typeof enabled !== 'boolean' || !isString(text)) return null;
+  if (position !== 'top' && position !== 'bottom') return null;
+  if (graphemes(text).length > CAPTION_MAX_LENGTH) return null;
+  return { enabled, text, position };
+}
+
+// Entries saved before themes existed have no design; they show as Classic / Plain.
+function parseDesign(value: unknown): QrDesign | null {
+  if (value === undefined) return DEFAULT_DESIGN;
+  if (!isRecord(value) || !isThemeChoice(value.theme)) return null;
+  const caption = parseCaption(value.caption);
+  return caption
+    ? { theme: { themeId: value.theme.themeId, subThemeId: value.theme.subThemeId }, caption }
+    : null;
+}
+
 export function parseEntry(value: unknown): HistoryEntry | null {
   if (!isRecord(value)) return null;
   const type = QR_TYPES.find((candidate) => candidate === value.type);
   if (!type || !isString(value.id) || typeof value.createdAt !== 'number') return null;
   const input = parseInput(type, value.input);
   const style = parseStyle(value.style);
-  if (!input || !style) return null;
+  const design = parseDesign(value.design);
+  if (!input || !style || !design) return null;
   return {
     id: value.id,
     createdAt: value.createdAt,
     type,
     input,
     style,
+    design,
     passwordOmitted: value.passwordOmitted === true,
   } as HistoryEntry;
 }
